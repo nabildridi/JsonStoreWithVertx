@@ -243,7 +243,7 @@ Example:
 
 ## Delete
 
-#Delete by Id
+# Delete by Id
 
  - Path : **/{id}**
  - Http method : **DELETE**
@@ -253,7 +253,7 @@ Example:
  
 The response will be a json containing the **_systemId** of the deleted document.
 
-#Delete by request body
+# Delete by request body
 
  - Path : **/**
  - Http method : **DELETE**
