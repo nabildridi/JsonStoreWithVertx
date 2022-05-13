@@ -34,7 +34,7 @@ build the fatjar with :
 
 and just execute the jar with :
 
-    java -jar
+    java -jar JsonStoreWithVertx-1.0.jar
 
 
 ## Configuration
