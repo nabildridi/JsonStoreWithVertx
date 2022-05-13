@@ -1,0 +1,6 @@
+{
+	"application_port" : 8080,
+	"store_fs_path" : "d:\\.jsonStore",
+	"cache_size" : 100000,
+	"cache_preload" : true
+}
