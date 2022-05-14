@@ -1,20 +1,13 @@
 package org.nd.verticles.fs;
 
 import java.io.File;
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletionService;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorCompletionService;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-import org.apache.commons.io.FilenameUtils;
-import org.nd.dto.FileIdAndContent;
 import org.nd.routes.Routes;
-import org.nd.threads.FileReaderThread;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,16 +16,15 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
+import com.spotify.sparkey.CompressionType;
+import com.spotify.sparkey.Sparkey;
+import com.spotify.sparkey.SparkeyReader;
+import com.spotify.sparkey.SparkeyWriter;
 
-import io.netty.util.concurrent.Future;
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.CompositeFuture;
 import io.vertx.core.Context;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.eventbus.DeliveryOptions;
-import io.vertx.core.eventbus.Message;
 import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.shareddata.LocalMap;
@@ -46,6 +38,10 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 	private LoadingCache<String, DocumentContext> documentContextCache;
 
 	private Integer cachesSize;
+
+	private SparkeyWriter kvWriter;
+	private SparkeyReader kvReader;
+	private File kvIndexFile = null;
 
 	@Override
 	public void init(Vertx vertx, Context context) {
@@ -71,18 +67,34 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 			vertx.fileSystem().mkdirBlocking(storeFolderPath);
 		}
 
-		// construct files index
-		List<String> filesnames = vertx.fileSystem().readDirBlocking(storeFolderPath);
-		logger.debug("sourceDir files number :" + filesnames.size());
+		// init kv database
+		kvIndexFile = new File(storeFolderPath + File.separator + "jsonStoreData.spi");
+		
+		
+	
 
-		List<String> ids = new ArrayList<String>();
-		LocalMap<String, String> filesMap = vertx.sharedData().getLocalMap("files");
-		for (String filename : filesnames) {
-			String id = FilenameUtils.getBaseName(filename);
-			filesMap.put(id, "");
-			ids.add(id);
+		try {
+			if (!kvIndexFile.exists()) {
+	            logger.debug("Creating new file: " + kvIndexFile.getName());
+	            kvWriter = Sparkey.createNew(kvIndexFile);
+	            kvWriter.flush();
+	            kvWriter.writeHash();
+	            //kvWriter.close();
+	        }else {
+	        	 kvWriter = Sparkey.append(kvIndexFile);
+	        }
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		}
 
+		try {
+			kvReader = Sparkey.open(kvIndexFile);
+		} catch (IOException e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+		
 		filesContentCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofMinutes(30))
 				.expireAfterWrite(Duration.ofMinutes(30)).build(new CacheLoader<String, String>() {
 
@@ -110,35 +122,41 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 					}
 				});
 
+
+		// construct files index
+		List<String> ids = new ArrayList<String>();
+		LocalMap<String, String> filesMap = vertx.sharedData().getLocalMap("files");
+		
+		try {
+			SparkeyReader reader = kvReader.duplicate();
+			for (SparkeyReader.Entry entry : reader) {
+				String id = entry.getKeyAsString();
+				filesMap.put(id, "");
+				ids.add(id);
+			}
+		} catch (Exception e1) {e1.printStackTrace();}	
+		
+		logger.debug("Json documents number :" + ids.size());
+		
+
 		boolean makePreload = config().getBoolean("cache_preload", false);
 		if (makePreload) {
 			// initial preloading
 			int preloadCount = Math.min(ids.size(), cachesSize);
 			logger.debug("Preload activated, to preload " + preloadCount + " files, it may take some time");
 
-			ExecutorService executor = Executors.newFixedThreadPool(16);
-			CompletionService<FileIdAndContent> completionService = new ExecutorCompletionService<FileIdAndContent>(executor);
-
-
-			for (int i = 0; i < preloadCount; i++) {
-				String filename = ids.get(i) + ".json";
-				String path = storeFolderPath + File.separator + filename;
-				completionService.submit(new FileReaderThread(ids.get(i), path));
-			}
-			
 			for (int i = 0; i < preloadCount; i++) {
 				try {
-					FileIdAndContent file = completionService.take().get();
-					filesContentCache.put(file.getId(), file.getContent());
-					jsonObjectCache.get(file.getId());
-					documentContextCache.get(file.getId());
-				} catch (Exception e) {} 
+					filesContentCache.get(ids.get(i));
+					jsonObjectCache.get(ids.get(i));
+					documentContextCache.get(ids.get(i));
+				} catch (Exception e) {
+				}
 			}
-			
+
 			Instant end = Instant.now();
 			Duration timeElapsed = Duration.between(start, end);
 			logger.debug("intialization completed; Time taken : " + timeElapsed.toSeconds() + " seconds");
-
 
 		}
 
@@ -148,10 +166,15 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 
 	private String getFromFs(String id) {
 
-		String filename = id + ".json";
-		String path = storeFolderPath + File.separator + filename;
-		String content = vertx.fileSystem().readFileBlocking(path).toString();
-		return content;
+		String content = "";
+		try {
+			SparkeyReader reader = kvReader.duplicate();
+			content = reader.getAsString(id);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return content; 
 	}
 
 	private JsonObject getJsonObject(String id) {
@@ -230,7 +253,7 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 				}
 				message.reply(result);
 			} catch (Exception e) {
-				JsonObject result = new JsonObject().put("id", id).put("valueForSort", null);
+				JsonObject result = new JsonObject().put("id", id).put("valueForSort", "");
 				message.reply(result);
 			}
 
@@ -275,35 +298,30 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 			String operation = message.headers().get("operation");
 			JsonObject json = message.body();
 
-			String filename = systemId + ".json";
-			String path = storeFolderPath + File.separator + filename;
+			try {
+				kvWriter.put(systemId, json.encode());
+				kvWriter.flush();
+				kvWriter.writeHash();
 
-			// Write in physical fs
-			vertx.fileSystem().writeFile(path, Buffer.buffer(json.encode()), result -> {
-				if (result.succeeded()) {
-
-					// update in memory files list
-					vertx.sharedData().getLocalMap("files").put(systemId, "");
-
-					if (filesContentCache.getIfPresent(systemId) != null) {
-						filesContentCache.invalidate(systemId);
-					}
-					if (jsonObjectCache.getIfPresent(systemId) != null) {
-						jsonObjectCache.invalidate(systemId);
-					}
-					if (documentContextCache.getIfPresent(systemId) != null) {
-						documentContextCache.invalidate(systemId);
-					}
-
-					filesContentCache.get(systemId);
-					jsonObjectCache.get(systemId);
-					documentContextCache.get(systemId);
-
-					message.reply(true);
-				} else {
-					message.fail(0, "Error reading file: " + path.toString());
+				if (filesContentCache.getIfPresent(systemId) != null) {
+					filesContentCache.invalidate(systemId);
 				}
-			});
+				if (jsonObjectCache.getIfPresent(systemId) != null) {
+					jsonObjectCache.invalidate(systemId);
+				}
+				if (documentContextCache.getIfPresent(systemId) != null) {
+					documentContextCache.invalidate(systemId);
+				}
+
+				filesContentCache.get(systemId);
+				jsonObjectCache.get(systemId);
+				documentContextCache.get(systemId);
+
+				message.reply(true);
+			} catch (IOException e) {
+				e.printStackTrace();
+				message.fail(0, "Error saving : " + systemId);
+			}
 
 		});
 		// -------------------------------------------------------------------------------------------------------------------
@@ -314,27 +332,24 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 
 			String systemId = message.headers().get("systemId");
 
-			// remove the file
-			String filename = systemId + ".json";
-			String path = storeFolderPath + File.separator + filename;
+			try {
+				kvWriter.delete(systemId);
+				kvWriter.flush();
+				kvWriter.writeHash();
 
-			// delete from physical fs
-			vertx.fileSystem().delete(path, result -> {
-				if (result.succeeded()) {
+				vertx.sharedData().getLocalMap("files").remove(systemId);
 
-					// update in memory files list
-					vertx.sharedData().getLocalMap("files").remove(systemId);
+				// remove from cache
+				filesContentCache.invalidate(systemId);
+				jsonObjectCache.invalidate(systemId);
+				documentContextCache.invalidate(systemId);
 
-					// remove from cache
-					filesContentCache.invalidate(systemId);
-					jsonObjectCache.invalidate(systemId);
-					documentContextCache.invalidate(systemId);
+				message.reply(true);
 
-					message.reply(true);
-				} else {
-					message.fail(0, "Error reading file: " + path.toString());
-				}
-			});
+			} catch (IOException e) {
+				e.printStackTrace();
+				message.fail(0, "Error removing : " + systemId);
+			}
 
 		});
 
