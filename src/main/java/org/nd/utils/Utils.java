@@ -3,13 +3,11 @@ package org.nd.utils;
 import java.util.Collections;
 import java.util.List;
 
-import repackaged.com.arakelian.core.org.apache.commons.lang3.StringUtils;
-
 public class Utils {
 
 	public static boolean notNullAndNotEmpty(String value) {
 		
-		return !StringUtils.isEmpty(value) && !StringUtils.isBlank(value);
+		return value!= null && !value.isEmpty() && !value.isBlank();
 		
 	}
 	

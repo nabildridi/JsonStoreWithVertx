@@ -16,7 +16,6 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
-import com.spotify.sparkey.CompressionType;
 import com.spotify.sparkey.Sparkey;
 import com.spotify.sparkey.SparkeyReader;
 import com.spotify.sparkey.SparkeyWriter;
@@ -25,6 +24,7 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Context;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.shareddata.LocalMap;
@@ -33,10 +33,9 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 	private static Logger logger = LoggerFactory.getLogger(FileSystemOperationsVerticle.class);
 
 	private String storeFolderPath;
-	private LoadingCache<String, String> filesContentCache;
 	private LoadingCache<String, JsonObject> jsonObjectCache;
-	private LoadingCache<String, DocumentContext> documentContextCache;
 
+	private LocalMap<String, String> filesMap;
 	private Integer cachesSize;
 
 	private SparkeyWriter kvWriter;
@@ -69,20 +68,17 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 
 		// init kv database
 		kvIndexFile = new File(storeFolderPath + File.separator + "jsonStoreData.spi");
-		
-		
-	
 
 		try {
 			if (!kvIndexFile.exists()) {
-	            logger.debug("Creating new file: " + kvIndexFile.getName());
-	            kvWriter = Sparkey.createNew(kvIndexFile);
-	            kvWriter.flush();
-	            kvWriter.writeHash();
-	            //kvWriter.close();
-	        }else {
-	        	 kvWriter = Sparkey.append(kvIndexFile);
-	        }
+				logger.debug("Creating new file: " + kvIndexFile.getName());
+				kvWriter = Sparkey.createNew(kvIndexFile);
+				kvWriter.flush();
+				kvWriter.writeHash();
+				// kvWriter.close();
+			} else {
+				kvWriter = Sparkey.append(kvIndexFile);
+			}
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
@@ -94,18 +90,9 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 			// TODO Auto-generated catch block
 			e2.printStackTrace();
 		}
-		
-		filesContentCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofMinutes(30))
-				.expireAfterWrite(Duration.ofMinutes(30)).build(new CacheLoader<String, String>() {
 
-					@Override
-					public String load(String id) throws Exception {
-						return getFromFs(id);
-					}
-				});
-
-		jsonObjectCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofMinutes(30))
-				.expireAfterWrite(Duration.ofMinutes(30)).build(new CacheLoader<String, JsonObject>() {
+		jsonObjectCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofDays(7))
+				.build(new CacheLoader<String, JsonObject>() {
 
 					@Override
 					public JsonObject load(String id) throws Exception {
@@ -113,31 +100,23 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 					}
 				});
 
-		documentContextCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofMinutes(30))
-				.expireAfterWrite(Duration.ofMinutes(30)).build(new CacheLoader<String, DocumentContext>() {
-
-					@Override
-					public DocumentContext load(String id) throws Exception {
-						return getDocumentContext(id);
-					}
-				});
-
-
 		// construct files index
 		List<String> ids = new ArrayList<String>();
-		LocalMap<String, String> filesMap = vertx.sharedData().getLocalMap("files");
-		
+		filesMap = vertx.sharedData().getLocalMap("files");
+
 		try {
 			SparkeyReader reader = kvReader.duplicate();
 			for (SparkeyReader.Entry entry : reader) {
 				String id = entry.getKeyAsString();
-				filesMap.put(id, "");
+				String content = entry.getValueAsString();
+				filesMap.put(id, content);
 				ids.add(id);
 			}
-		} catch (Exception e1) {e1.printStackTrace();}	
-		
+		} catch (Exception e1) {
+			e1.printStackTrace();
+		}
+
 		logger.debug("Json documents number :" + ids.size());
-		
 
 		boolean makePreload = config().getBoolean("cache_preload", false);
 		if (makePreload) {
@@ -147,9 +126,7 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 
 			for (int i = 0; i < preloadCount; i++) {
 				try {
-					filesContentCache.get(ids.get(i));
 					jsonObjectCache.get(ids.get(i));
-					documentContextCache.get(ids.get(i));
 				} catch (Exception e) {
 				}
 			}
@@ -164,30 +141,9 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 
 	// -----------------------------------------------------------------------------------------------------------------------------------------
 
-	private String getFromFs(String id) {
-
-		String content = "";
-		try {
-			SparkeyReader reader = kvReader.duplicate();
-			content = reader.getAsString(id);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		return content; 
-	}
-
 	private JsonObject getJsonObject(String id) {
 		try {
-			return new JsonObject(filesContentCache.get(id));
-		} catch (Exception e) {
-			return null;
-		}
-	}
-
-	private DocumentContext getDocumentContext(String id) {
-		try {
-			return JsonPath.parse(filesContentCache.get(id));
+			return new JsonObject(filesMap.get(id));
 		} catch (Exception e) {
 			return null;
 		}
@@ -216,79 +172,6 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 		});
 
 		// ------------------------------------------------------------------------------------------------------------------------
-		MessageConsumer<String> toStringConsumer = vertx.eventBus().consumer(Routes.READ_FILE_TO_STRING);
-		toStringConsumer.handler(message -> {
-
-			String id = message.body();
-
-			try {
-				String content = filesContentCache.get(id);
-				if (content != null) {
-					message.reply(content);
-				} else {
-					message.fail(1, "File not found with id: " + id);
-				}
-
-			} catch (Exception e) {
-				message.fail(2, "Error getting file content, file with id: " + id);
-			}
-
-		});
-
-		// ------------------------------------------------------------------------------------------------------------------------
-		MessageConsumer<String> jsonPathConsumer = vertx.eventBus().consumer(Routes.GET_JSON_PATH_RESULT);
-		jsonPathConsumer.handler(message -> {
-
-			String id = message.body();
-			String JsonPathQuery = message.headers().get("JsonPathQuery");
-
-			try {
-				Object results = documentContextCache.get(id).read(JsonPathQuery);
-				JsonObject result = null;
-				if (results instanceof List) {
-					List<Object> list = (List<Object>) results;
-					result = new JsonObject().put("id", id).put("valueForSort", String.valueOf(list.get(0)));
-				} else {
-					result = new JsonObject().put("id", id).put("valueForSort", String.valueOf(results));
-				}
-				message.reply(result);
-			} catch (Exception e) {
-				JsonObject result = new JsonObject().put("id", id).put("valueForSort", "");
-				message.reply(result);
-			}
-
-		});
-
-		// ------------------------------------------------------------------------------------------------------------------------
-		MessageConsumer<String> hasJsonPathConsumer = vertx.eventBus().consumer(Routes.HAS_JSON_PATH_RESULTS);
-		hasJsonPathConsumer.handler(message -> {
-
-			String id = message.body();
-			String JsonPathQuery = message.headers().get("JsonPathQuery");
-
-			try {
-				Object results = documentContextCache.get(id).read(JsonPathQuery);
-				if (results instanceof List) {
-					List<Object> list = (List) results;
-					if (list != null && list.size() > 0) {
-						message.reply(true);
-					} else {
-						message.reply(false);
-					}
-				} else {
-					if (results != null) {
-						message.reply(true);
-					} else {
-						message.reply(false);
-					}
-				}
-			} catch (Exception e) {
-				message.reply(false);
-			}
-
-		});
-
-		// ------------------------------------------------------------------------------------------------------------------------
 
 		MessageConsumer<JsonObject> saveConsumer = vertx.eventBus().consumer(Routes.SAVE_TO_FS);
 		saveConsumer.handler(message -> {
@@ -303,19 +186,20 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 				kvWriter.flush();
 				kvWriter.writeHash();
 
-				if (filesContentCache.getIfPresent(systemId) != null) {
-					filesContentCache.invalidate(systemId);
+				if (filesMap.containsKey(systemId)) {
+					filesMap.replace(systemId, json.encode());
+				} else {
+					filesMap.put(systemId, json.encode());
 				}
+
 				if (jsonObjectCache.getIfPresent(systemId) != null) {
 					jsonObjectCache.invalidate(systemId);
 				}
-				if (documentContextCache.getIfPresent(systemId) != null) {
-					documentContextCache.invalidate(systemId);
-				}
 
-				filesContentCache.get(systemId);
 				jsonObjectCache.get(systemId);
-				documentContextCache.get(systemId);
+
+				DeliveryOptions options = new DeliveryOptions().addHeader("needReoald", "true");
+				vertx.eventBus().send(Routes.JSON_PATH_INVALIDATE, systemId, options);
 
 				message.reply(true);
 			} catch (IOException e) {
@@ -337,12 +221,12 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 				kvWriter.flush();
 				kvWriter.writeHash();
 
-				vertx.sharedData().getLocalMap("files").remove(systemId);
+				filesMap.remove(systemId);
 
 				// remove from cache
-				filesContentCache.invalidate(systemId);
 				jsonObjectCache.invalidate(systemId);
-				documentContextCache.invalidate(systemId);
+				DeliveryOptions options = new DeliveryOptions().addHeader("needReoald", "false");
+				vertx.eventBus().send(Routes.JSON_PATH_INVALIDATE, systemId, options);
 
 				message.reply(true);
 

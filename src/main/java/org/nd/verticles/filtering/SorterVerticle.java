@@ -43,7 +43,7 @@ public class SorterVerticle extends AbstractVerticle {
 			
 			List<Future> futures = new ArrayList<Future>();
 			
-			DeliveryOptions options = new DeliveryOptions().addHeader("JsonPathQuery", "$." + queryHolder.getSortField());	
+			DeliveryOptions options = new DeliveryOptions().addHeader("JsonPathQuery",  queryHolder.getSortField());	
 			keysArray.forEach((id) -> {
 				futures.add(vertx.eventBus().request(Routes.GET_JSON_PATH_RESULT, id, options));
 			});

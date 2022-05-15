@@ -4,8 +4,8 @@ import org.nd.verticles.ServerVerticle;
 import org.nd.verticles.filtering.ConditionVerifierVerticle;
 import org.nd.verticles.filtering.FilterVerticle;
 import org.nd.verticles.filtering.SorterVerticle;
-import org.nd.verticles.fragment.FragmentExtractorVerticle;
 import org.nd.verticles.fs.FilesListsReaderVerticle;
+import org.nd.verticles.jsonpath.JsonPathVerticle;
 import org.nd.verticles.fs.FileSystemOperationsVerticle;
 import org.nd.verticles.operations.Delete;
 import org.nd.verticles.operations.PartialUpdate;
@@ -44,8 +44,6 @@ public class MainApplication {
 				vertx.deployVerticle(PartialUpdate.class.getName());
 				
 				vertx.deployVerticle(FilesListsReaderVerticle.class.getName());	
-				vertx.deployVerticle(FragmentExtractorVerticle.class.getName());
-				
 				
 				vertx.deployVerticle(SorterVerticle.class.getName());
 				vertx.deployVerticle(FilterVerticle.class.getName());
@@ -53,6 +51,9 @@ public class MainApplication {
 				vertx.deployVerticle(ConditionVerifierVerticle.class.getName(), new DeploymentOptions().setWorkerPoolName("json-path-pool")
 				        .setWorkerPoolSize(128)
 				        .setWorker(true));
+				
+				vertx.deployVerticle(JsonPathVerticle.class.getName(), new DeploymentOptions().setConfig(configObject));
+				
 				
 			});
 
