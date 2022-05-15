@@ -14,8 +14,6 @@ import org.slf4j.LoggerFactory;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.jayway.jsonpath.DocumentContext;
-import com.jayway.jsonpath.JsonPath;
 import com.spotify.sparkey.Sparkey;
 import com.spotify.sparkey.SparkeyReader;
 import com.spotify.sparkey.SparkeyWriter;
@@ -75,19 +73,16 @@ public class FileSystemOperationsVerticle extends AbstractVerticle {
 				kvWriter = Sparkey.createNew(kvIndexFile);
 				kvWriter.flush();
 				kvWriter.writeHash();
-				// kvWriter.close();
 			} else {
 				kvWriter = Sparkey.append(kvIndexFile);
 			}
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 
 		try {
 			kvReader = Sparkey.open(kvIndexFile);
 		} catch (IOException e2) {
-			// TODO Auto-generated catch block
 			e2.printStackTrace();
 		}
 
