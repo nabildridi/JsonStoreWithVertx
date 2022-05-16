@@ -43,10 +43,13 @@ public class FilterVerticle extends AbstractVerticle {
 			CompositeFuture.all(futures).onComplete(cf -> {
 
 				if (cf.succeeded()) {
-					for (Future<Message<String>> future : futures) {
+					for (Future<Message<JsonObject>> future : futures) {
 						if (future.succeeded()) {
-							String id = future.result().body();
-							if (id != null) {
+							JsonObject jo = future.result().body();
+							String id = jo.getString("id");
+							boolean  checkResult = jo.getBoolean("result");
+							
+							if (checkResult) {
 								resultList.add(id);
 							}
 							

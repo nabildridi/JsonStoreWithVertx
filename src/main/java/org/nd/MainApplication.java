@@ -1,7 +1,6 @@
 package org.nd;
 
 import org.nd.verticles.ServerVerticle;
-import org.nd.verticles.filtering.ConditionVerifierVerticle;
 import org.nd.verticles.filtering.FilterVerticle;
 import org.nd.verticles.filtering.SorterVerticle;
 import org.nd.verticles.fs.FilesListsReaderVerticle;
@@ -46,12 +45,8 @@ public class MainApplication {
 				vertx.deployVerticle(FilesListsReaderVerticle.class.getName());	
 				
 				vertx.deployVerticle(SorterVerticle.class.getName());
-				vertx.deployVerticle(FilterVerticle.class.getName());
-				
-				vertx.deployVerticle(ConditionVerifierVerticle.class.getName(), new DeploymentOptions().setWorkerPoolName("json-path-pool")
-				        .setWorkerPoolSize(128)
-				        .setWorker(true));
-				
+				vertx.deployVerticle(FilterVerticle.class.getName());				
+			
 				vertx.deployVerticle(JsonPathVerticle.class.getName(), new DeploymentOptions().setConfig(configObject));
 				
 				

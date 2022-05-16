@@ -135,7 +135,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 		});
 
 		// ------------------------------------------------------------------------------------------------------------------------
-		MessageConsumer<String> hasJsonPathConsumer = vertx.eventBus().consumer(Routes.HAS_JSON_PATH_RESULTS);
+		MessageConsumer<String> hasJsonPathConsumer = vertx.eventBus().consumer(Routes.CHECK);
 		hasJsonPathConsumer.handler(message -> {
 
 			String id = message.body();
@@ -146,19 +146,24 @@ public class JsonPathVerticle extends AbstractVerticle {
 				if (results instanceof List) {
 					List<Object> list = (List) results;
 					if (list != null && list.size() > 0) {
-						message.reply(true);
+						JsonObject ret = new JsonObject().put("id", id).put("result", true);
+						message.reply(ret);
 					} else {
-						message.reply(false);
+						JsonObject ret = new JsonObject().put("id", id).put("result", false);
+						message.reply(ret);
 					}
 				} else {
 					if (results != null) {
-						message.reply(true);
+						JsonObject ret = new JsonObject().put("id", id).put("result", true);
+						message.reply(ret);
 					} else {
-						message.reply(false);
+						JsonObject ret = new JsonObject().put("id", id).put("result", false);
+						message.reply(ret);
 					}
 				}
 			} catch (Exception e) {
-				message.reply(false);
+				JsonObject ret = new JsonObject().put("id", id).put("result", false);
+				message.reply(ret);
 			}
 
 		});
@@ -173,9 +178,14 @@ public class JsonPathVerticle extends AbstractVerticle {
 			if (documentContextCache.getIfPresent(id) != null) {
 				documentContextCache.invalidate(id);
 			}
+			
+			if (flattenCache.getIfPresent(id) != null) {
+				flattenCache.invalidate(id);
+			}
 
 			if (reload.equals("true")) {
 				documentContextCache.get(id);
+				flattenCache.get(id);
 			}
 
 			message.reply(true);
