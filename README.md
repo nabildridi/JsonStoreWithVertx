@@ -337,7 +337,7 @@ An example of a full request :
 
 ## Some benchmarks :
 
-Test : 33000 documents fully cached, I7 processor with 16 gb od ram
+Test : 33000 documents fully cached, I7 processor with 16 gb of ram
 
 |Operation| Time |
 |--|--|
