@@ -6,8 +6,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.nd.routes.Routes;
+import org.nd.threads.FilterThread;
+import org.nd.threads.SortValueGetterThread;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -112,59 +118,71 @@ public class JsonPathVerticle extends AbstractVerticle {
 
 	public void start(Promise<Void> startPromise) {
 
-		MessageConsumer<String> jsonPathConsumer = vertx.eventBus().consumer(Routes.GET_JSON_PATH_RESULT);
+		MessageConsumer<JsonArray> jsonPathConsumer = vertx.eventBus().consumer(Routes.GET_JSON_PATH_RESULT);
 		jsonPathConsumer.handler(message -> {
 
-			String id = message.body();
-			String JsonPathQuery = message.headers().get("JsonPathQuery");
+			JsonArray keysArray = message.body();
+			String jsonPathQuery = message.headers().get("JsonPathQuery");
 
-			try {
-				Object result = flattenCache.get(id).get(JsonPathQuery);
+			ExecutorService executorService = Executors.newFixedThreadPool(64);
+			CompletionService<JsonObject> executorCompletionService = new ExecutorCompletionService<JsonObject>(
+					executorService);
 
-				if (result != null) {
-					result = new JsonObject().put("id", id).put("valueForSort", String.valueOf(result));
-				} else {
-					result = new JsonObject().put("id", id).put("valueForSort", "");
+			keysArray.forEach((id) -> {
+				String systemId = (String) id;
+				executorCompletionService
+						.submit(new SortValueGetterThread(systemId, jsonPathQuery, flattenCache.get(systemId)));
+			});
+
+			JsonArray result = new JsonArray();
+			for (int i = 0; i < keysArray.size(); i++) {
+				try {
+					result.add(executorCompletionService.take().get());
+				} catch (Exception e) {
 				}
-				message.reply(result);
-			} catch (Exception e) {
-				JsonObject result = new JsonObject().put("id", id).put("valueForSort", "");
-				message.reply(result);
 			}
+			
+			try {
+				executorService.shutdown();
+			} catch (Exception e) {}
+
+			message.reply(result);
 
 		});
 
 		// ------------------------------------------------------------------------------------------------------------------------
-		MessageConsumer<String> hasJsonPathConsumer = vertx.eventBus().consumer(Routes.CHECK);
+		MessageConsumer<JsonArray> hasJsonPathConsumer = vertx.eventBus().consumer(Routes.CHECK);
 		hasJsonPathConsumer.handler(message -> {
 
-			String id = message.body();
-			String JsonPathQuery = message.headers().get("JsonPathQuery");
+			JsonArray keysArray = message.body();
+			String jsonPathQuery = message.headers().get("JsonPathQuery");
+			
 
-			try {
-				Object results = documentContextCache.get(id).read(JsonPathQuery);
-				if (results instanceof List) {
-					List<Object> list = (List) results;
-					if (list != null && list.size() > 0) {
-						JsonObject ret = new JsonObject().put("id", id).put("result", true);
-						message.reply(ret);
-					} else {
-						JsonObject ret = new JsonObject().put("id", id).put("result", false);
-						message.reply(ret);
-					}
-				} else {
-					if (results != null) {
-						JsonObject ret = new JsonObject().put("id", id).put("result", true);
-						message.reply(ret);
-					} else {
-						JsonObject ret = new JsonObject().put("id", id).put("result", false);
-						message.reply(ret);
-					}
+			ExecutorService executorService = Executors.newFixedThreadPool(64);
+			CompletionService<String> executorCompletionService = new ExecutorCompletionService<String>(
+					executorService);
+
+			keysArray.forEach((id) -> {
+				String systemId = (String) id;
+				executorCompletionService
+						.submit(new FilterThread(systemId, jsonPathQuery, documentContextCache.get(systemId)));
+			});
+			
+
+			JsonArray result = new JsonArray();
+			for (int i = 0; i < keysArray.size(); i++) {
+				try {
+					String id = executorCompletionService.take().get();
+					if(id!=null)result.add(id);
+				} catch (Exception e) {
 				}
-			} catch (Exception e) {
-				JsonObject ret = new JsonObject().put("id", id).put("result", false);
-				message.reply(ret);
 			}
+			
+			try {
+				executorService.shutdown();
+			} catch (Exception e) {}
+
+			message.reply(result);
 
 		});
 
@@ -178,7 +196,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 			if (documentContextCache.getIfPresent(id) != null) {
 				documentContextCache.invalidate(id);
 			}
-			
+
 			if (flattenCache.getIfPresent(id) != null) {
 				flattenCache.invalidate(id);
 			}

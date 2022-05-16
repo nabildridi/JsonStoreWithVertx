@@ -1,21 +1,15 @@
 package org.nd.verticles.filtering;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import org.nd.routes.Routes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.CompositeFuture;
-import io.vertx.core.Future;
 import io.vertx.core.eventbus.DeliveryOptions;
-import io.vertx.core.eventbus.Message;
 import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonArray;
-import io.vertx.core.json.JsonObject;
 import io.vertx.core.shareddata.LocalMap;
 
 public class FilterVerticle extends AbstractVerticle {
@@ -30,31 +24,19 @@ public class FilterVerticle extends AbstractVerticle {
 			String JsonPathQuery = message.body();
 
 			LocalMap<String, String> filesMap = vertx.sharedData().getLocalMap("files");
-			Set<String> idsSet = filesMap.keySet();
+			
+			List<String> keysList = List.copyOf(filesMap.keySet());
+			JsonArray keysArray = new JsonArray(keysList);
 
-			// loop
-			List<Future> futures = new ArrayList<Future>();
+
 			DeliveryOptions options = new DeliveryOptions().addHeader("JsonPathQuery", JsonPathQuery);
-			for(String idToCheck : idsSet) {
-				futures.add(vertx.eventBus().request(Routes.CHECK, idToCheck , options));
-			}
+			
+			
+			vertx.eventBus().<JsonArray>request(Routes.CHECK, keysArray , options, cf -> {
 
-			JsonArray resultList = new JsonArray();
-			CompositeFuture.all(futures).onComplete(cf -> {
-
+				JsonArray resultList = new JsonArray();
 				if (cf.succeeded()) {
-					for (Future<Message<JsonObject>> future : futures) {
-						if (future.succeeded()) {
-							JsonObject jo = future.result().body();
-							String id = jo.getString("id");
-							boolean  checkResult = jo.getBoolean("result");
-							
-							if (checkResult) {
-								resultList.add(id);
-							}
-							
-						}
-					}
+					resultList = cf.result().body();
 					message.reply(resultList);
 				} else {
 					message.reply(resultList);
