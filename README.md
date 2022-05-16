@@ -55,7 +55,7 @@ The application configuration is **conf/config.json**
  - **application_port** : the http port of the application
  - **store_fs_path** : the location of folder where the json files wil be stored, if omitted then the files will be saved in **<user.home>/.jsonStore**
  - **cache_size** : the maximum size of the cache
- - **cache_preload** : if true the application will preload the json documents into the cache at the startup until the maximun size is reached or there is no more documents to cache, if activated the apllication startup wil take some time (took 8 seconds to preload 33000 json documents from an ssd during tests) but will gain maximum performance later.
+ - **cache_preload** : if true the application will preload the json documents into the cache at the startup until the maximun size is reached or there is no more documents to cache, if activated the application startup wil take little time (took 4 seconds to preload 33000 json documents from an ssd during tests) but will gain maximum performance later.
 
 ### Http basic authentication configuration :
 Every request must provide http basic authentication (username and password), the usernames and passwords can be configured in **vertx-users.properties** file.
