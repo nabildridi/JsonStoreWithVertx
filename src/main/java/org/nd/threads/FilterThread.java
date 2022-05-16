@@ -8,7 +8,7 @@ import com.jayway.jsonpath.DocumentContext;
 public class FilterThread implements Callable<String> {
 	
 	private String id;
-	private String JsonPathQuery;
+	private String jonPathQuery;
 	private DocumentContext dc;
 		
 
@@ -19,7 +19,7 @@ public class FilterThread implements Callable<String> {
 	public FilterThread(String id, String jsonPathQuery, DocumentContext dc) {
 		super();
 		this.id = id;
-		JsonPathQuery = jsonPathQuery;
+		this.jonPathQuery = jsonPathQuery;
 		this.dc = dc;
 	}
 
@@ -29,7 +29,7 @@ public class FilterThread implements Callable<String> {
 	public String call() throws Exception {
 		
 		try {
-			Object results = dc.read(JsonPathQuery);
+			Object results = dc.read(jonPathQuery);
 			if (results instanceof List) {
 				List<Object> list = (List) results;
 				if (list != null && list.size() > 0) {

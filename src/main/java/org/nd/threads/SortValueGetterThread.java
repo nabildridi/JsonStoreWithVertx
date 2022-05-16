@@ -8,7 +8,7 @@ import io.vertx.core.json.JsonObject;
 public class SortValueGetterThread implements Callable<JsonObject> {
 	
 	private String id;
-	private String JsonPathQuery;
+	private String jsonPathQuery;
 	private Map<String, Object> flattenJson;
 		
 
@@ -19,7 +19,7 @@ public class SortValueGetterThread implements Callable<JsonObject> {
 	public SortValueGetterThread(String id, String jsonPathQuery, Map<String, Object> flattenJson) {
 		super();
 		this.id = id;
-		JsonPathQuery = jsonPathQuery;
+		this.jsonPathQuery = jsonPathQuery;
 		this.flattenJson = flattenJson;
 	}
 
@@ -29,7 +29,7 @@ public class SortValueGetterThread implements Callable<JsonObject> {
 	public JsonObject call() throws Exception {
 		
 		try {
-			Object result = flattenJson.get(JsonPathQuery);
+			Object result = flattenJson.get(jsonPathQuery);
 
 			if (result != null) {
 				return new JsonObject().put("id", id).put("valueForSort", String.valueOf(result));

@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.nd.routes.Routes;
+import org.nd.threads.ExtractThread;
 import org.nd.threads.FilterThread;
 import org.nd.threads.SortValueGetterThread;
 import org.slf4j.Logger;
@@ -232,24 +233,35 @@ public class JsonPathVerticle extends AbstractVerticle {
 			if (container instanceof JsonArray) {
 
 				JsonArray jsonsList = (JsonArray) container;
-				JsonArray result = new JsonArray();
+				ExecutorService executorService = Executors.newFixedThreadPool(64);
+				CompletionService<JsonObject> executorCompletionService = new ExecutorCompletionService<JsonObject>(
+						executorService);
+
+				
 				for (int i = 0; i < jsonsList.size(); i++) {
 					JsonObject jo = jsonsList.getJsonObject(i);
-
 					// get system id
 					String systemId = jo.getString("_systemId");
-
-					Map<String, Object> output = new HashMap<String, Object>();
-					for (String frName : fragmentsNames) {
-						Object value = flattenCache.get(systemId).get(frName);
-						if (value != null)
-							output.put(frName, value);
-					}
-					output.put("_systemId", systemId);
-					String outputJson = JsonUnflattener.unflatten(output);
-					result.add(new JsonObject(outputJson));
-
+					
+					executorCompletionService
+					.submit(new ExtractThread(systemId, fragmentsNames, flattenCache.get(systemId)));
 				}
+				
+				
+				JsonArray result = new JsonArray();
+				for (int i = 0; i < jsonsList.size(); i++) {
+					try {
+						result.add(executorCompletionService.take().get());
+					} catch (Exception e) {
+					}
+				}
+				
+				try {
+					executorService.shutdown();
+				} catch (Exception e) {}
+				
+				
+				
 				message.reply(result);
 			}
 

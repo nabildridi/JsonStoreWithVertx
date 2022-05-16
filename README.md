@@ -26,6 +26,10 @@ With http requests, you can :
 This a very basic json store, it doesn't have the concept of collections or other advanced functionalities.
 It's just a personal project playing with Vertx.
 
+## Java version
+
+Must be Java 17
+
 ## Build
 
 build the fatjar with :
@@ -329,5 +333,21 @@ An example of a full request :
 ```
 
  - **extract** : a comma separated list of the attibutes to be returned in the response, if absent then the whole document will be sent
+
+
+## Some benchmarks :
+
+Test : 33000 documents fully cached, I7 processor with 16 gb od ram
+
+|Operation| Time |
+|--|--|
+| Pagination |  ~7 ms |
+| Pagination and sorting | ~90 ms |
+| Pagination and extracting  | ~9 ms |
+| Pagination, sorting and extracting  | ~90 ms |
+| Pagination and filtering  | ~40 ms |
+| Pagination and filtering,sorting and extracting | ~43 ms |
+
+
 
 
