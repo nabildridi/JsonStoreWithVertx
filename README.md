@@ -346,7 +346,7 @@ Test : 33000 documents fully cached, I7 processor with 16 gb od ram
 | Pagination and extracting  | ~9 ms |
 | Pagination, sorting and extracting  | ~90 ms |
 | Pagination and filtering  | ~40 ms |
-| Pagination and filtering,sorting and extracting | ~43 ms |
+| Pagination, filtering, sorting and extracting | ~43 ms |
 
 
 
