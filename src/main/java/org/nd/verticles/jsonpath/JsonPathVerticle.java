@@ -126,7 +126,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 			String jsonPathQuery = message.headers().get("JsonPathQuery");
 
 			ExecutorService executorService = Executors.newFixedThreadPool(64);
-			CompletionService<JsonObject> executorCompletionService = new ExecutorCompletionService<JsonObject>(
+			CompletionService<Map.Entry<String, String>> executorCompletionService = new ExecutorCompletionService<Map.Entry<String, String>>(
 					executorService);
 
 			keysArray.forEach((id) -> {
@@ -135,10 +135,11 @@ public class JsonPathVerticle extends AbstractVerticle {
 						.submit(new SortValueGetterThread(systemId, jsonPathQuery, flattenCache.get(systemId)));
 			});
 
-			JsonArray result = new JsonArray();
+			Map<String, String> resultMap = new HashMap<String, String>();
 			for (int i = 0; i < keysArray.size(); i++) {
 				try {
-					result.add(executorCompletionService.take().get());
+					Map.Entry<String, String> entry = executorCompletionService.take().get();
+					resultMap.put(entry.getKey(), entry.getValue());
 				} catch (Exception e) {
 				}
 			}
@@ -147,7 +148,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 				executorService.shutdown();
 			} catch (Exception e) {}
 
-			message.reply(result);
+			message.reply(  JsonObject.mapFrom(resultMap) );
 
 		});
 

@@ -1,7 +1,6 @@
 package org.nd.verticles.filtering;
 
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,18 +33,12 @@ public class SorterVerticle extends AbstractVerticle {
 			JsonObject jsonQuery = new JsonObject(jsonQueryStr);
 			QueryHolder queryHolder = jsonQuery.mapTo(QueryHolder.class);
 
-			Map<String, String> unSortedMap = new HashMap<String, String>();
-
 			DeliveryOptions options = new DeliveryOptions().addHeader("JsonPathQuery", queryHolder.getSortField());
 
-			vertx.eventBus().<JsonArray>request(Routes.GET_JSON_PATH_RESULT, keysArray, options, cf -> {
+			vertx.eventBus().<JsonObject>request(Routes.GET_JSON_PATH_RESULT, keysArray, options, cf -> {
 
-				JsonArray resultArray = cf.result().body();
-
-				for (Object item : resultArray) {
-					JsonObject result = (JsonObject) item;
-					unSortedMap.put(result.getString("id"), result.getString("valueForSort"));
-				}
+				JsonObject resultJsonObject = cf.result().body();
+				Map<String, String> unSortedMap = resultJsonObject.mapTo(Map.class);
 
 				// sort map
 				LinkedHashMap<String, String> sortedMap = new LinkedHashMap<>();

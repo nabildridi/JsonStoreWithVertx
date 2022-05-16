@@ -1,11 +1,12 @@
 package org.nd.threads;
 
+import java.util.AbstractMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
 import io.vertx.core.json.JsonObject;
 
-public class SortValueGetterThread implements Callable<JsonObject> {
+public class SortValueGetterThread implements Callable<Map.Entry<String, String>> {
 	
 	private String id;
 	private String jsonPathQuery;
@@ -26,18 +27,22 @@ public class SortValueGetterThread implements Callable<JsonObject> {
 
 
 	@Override
-	public JsonObject call() throws Exception {
+	public Map.Entry<String, String> call() throws Exception {
 		
+		Map.Entry<String, String> tuple;
 		try {
 			Object result = flattenJson.get(jsonPathQuery);
-
+			
 			if (result != null) {
-				return new JsonObject().put("id", id).put("valueForSort", String.valueOf(result));
+				tuple = new AbstractMap.SimpleEntry<>(id, String.valueOf(result));
+				return tuple;
 			} else {
-				return new JsonObject().put("id", id).put("valueForSort", "");
+				tuple = new AbstractMap.SimpleEntry<>(id, "");
+				return tuple;
 			}
 		} catch (Exception e) {
-			return new JsonObject().put("id", id).put("valueForSort", "");
+			tuple = new AbstractMap.SimpleEntry<>(id, "");
+			return tuple;
 		}
 		
 	}
