@@ -6,15 +6,20 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.nd.dto.QueryHolder;
 import org.nd.routes.Routes;
 import org.nd.threads.ExtractThread;
 import org.nd.threads.FilterThread;
 import org.nd.threads.SortValueGetterThread;
+import org.nd.utils.InverseValueComparator;
+import org.nd.utils.ValueComparator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -123,7 +128,10 @@ public class JsonPathVerticle extends AbstractVerticle {
 		jsonPathConsumer.handler(message -> {
 
 			JsonArray keysArray = message.body();
-			String jsonPathQuery = message.headers().get("JsonPathQuery");
+			String jsonQueryStr = message.headers().get("jsonQuery");
+			JsonObject jsonQuery = new JsonObject(jsonQueryStr);
+			QueryHolder queryHolder = jsonQuery.mapTo(QueryHolder.class);
+			
 
 			ExecutorService executorService = Executors.newFixedThreadPool(64);
 			CompletionService<Map.Entry<String, String>> executorCompletionService = new ExecutorCompletionService<Map.Entry<String, String>>(
@@ -132,23 +140,45 @@ public class JsonPathVerticle extends AbstractVerticle {
 			keysArray.forEach((id) -> {
 				String systemId = (String) id;
 				executorCompletionService
-						.submit(new SortValueGetterThread(systemId, jsonPathQuery, flattenCache.get(systemId)));
+						.submit(new SortValueGetterThread(systemId, queryHolder.getSortField(), flattenCache.get(systemId)));
 			});
 
-			Map<String, String> resultMap = new HashMap<String, String>();
+			
+			SortedMap<String, List<String>> resultMap = null;
+			
+			if (queryHolder.getSortOrder().equals("1")) {
+				resultMap = new TreeMap<>( new ValueComparator());
+			}
+			if (queryHolder.getSortOrder().equals("-1")) {
+				resultMap = new TreeMap<>(new InverseValueComparator());
+			}
+			
 			for (int i = 0; i < keysArray.size(); i++) {
 				try {
 					Map.Entry<String, String> entry = executorCompletionService.take().get();
-					resultMap.put(entry.getKey(), entry.getValue());
+					String sortedMapKey = entry.getValue();
+					if(!resultMap.containsKey(sortedMapKey)) {
+						resultMap.put(sortedMapKey,new ArrayList<String>());
+					}
+					resultMap.get(sortedMapKey).add(entry.getKey());
 				} catch (Exception e) {
 				}
 			}
+			
+			
 			
 			try {
 				executorService.shutdown();
 			} catch (Exception e) {}
 
-			message.reply(  JsonObject.mapFrom(resultMap) );
+			//construct final sorted list
+			List<String> sortedList = new ArrayList<String>();
+			for (List<String> ids : resultMap.values()) {
+				sortedList.addAll(ids);
+		    }		
+								
+			
+			message.reply( new JsonArray(sortedList) );
 
 		});
 

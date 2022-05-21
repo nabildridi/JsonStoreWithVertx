@@ -35,24 +35,23 @@ public class MainApplication {
 			
 			vertx.deployVerticle(FileSystemOperationsVerticle.class.getName(), new DeploymentOptions().setConfig(configObject), res ->{
 				
-				vertx.deployVerticle(ServerVerticle.class.getName(), new DeploymentOptions().setConfig(configObject));
+				vertx.deployVerticle(JsonPathVerticle.class.getName(), new DeploymentOptions().setConfig(configObject), res2 ->{
+					
+					vertx.deployVerticle(ServerVerticle.class.getName(), new DeploymentOptions().setConfig(configObject));
+					
+					vertx.deployVerticle(SaveOrUpdate.class.getName());
+					vertx.deployVerticle(Delete.class.getName());
+					vertx.deployVerticle(Query.class.getName());
+					vertx.deployVerticle(PartialUpdate.class.getName());
+					
+					vertx.deployVerticle(FilesListsReaderVerticle.class.getName());	
+					
+					vertx.deployVerticle(SorterVerticle.class.getName());
+					vertx.deployVerticle(FilterVerticle.class.getName());	
+					
+				});		
 				
-				vertx.deployVerticle(SaveOrUpdate.class.getName());
-				vertx.deployVerticle(Delete.class.getName());
-				vertx.deployVerticle(Query.class.getName());
-				vertx.deployVerticle(PartialUpdate.class.getName());
-				
-				vertx.deployVerticle(FilesListsReaderVerticle.class.getName());	
-				
-				vertx.deployVerticle(SorterVerticle.class.getName());
-				vertx.deployVerticle(FilterVerticle.class.getName());				
-			
-				vertx.deployVerticle(JsonPathVerticle.class.getName(), new DeploymentOptions().setConfig(configObject));
-				
-				
-			});
-
-			
+			});		
 
 		});
 

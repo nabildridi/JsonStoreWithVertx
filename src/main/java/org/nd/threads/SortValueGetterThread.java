@@ -4,8 +4,6 @@ import java.util.AbstractMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-import io.vertx.core.json.JsonObject;
-
 public class SortValueGetterThread implements Callable<Map.Entry<String, String>> {
 	
 	private String id;

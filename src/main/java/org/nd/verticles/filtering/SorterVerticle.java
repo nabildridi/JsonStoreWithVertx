@@ -1,11 +1,5 @@
 package org.nd.verticles.filtering;
 
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.nd.dto.QueryHolder;
 import org.nd.routes.Routes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +8,6 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonArray;
-import io.vertx.core.json.JsonObject;
 
 public class SorterVerticle extends AbstractVerticle {
 	private static Logger logger = LoggerFactory.getLogger(SorterVerticle.class);
@@ -30,32 +23,15 @@ public class SorterVerticle extends AbstractVerticle {
 
 			// queryHolder
 			String jsonQueryStr = message.headers().get("jsonQuery");
-			JsonObject jsonQuery = new JsonObject(jsonQueryStr);
-			QueryHolder queryHolder = jsonQuery.mapTo(QueryHolder.class);
 
-			DeliveryOptions options = new DeliveryOptions().addHeader("JsonPathQuery", queryHolder.getSortField());
 
-			vertx.eventBus().<JsonObject>request(Routes.GET_JSON_PATH_RESULT, keysArray, options, cf -> {
+			DeliveryOptions options = new DeliveryOptions().addHeader("jsonQuery", jsonQueryStr);
 
-				JsonObject resultJsonObject = cf.result().body();
-				Map<String, String> unSortedMap = resultJsonObject.mapTo(Map.class);
+			vertx.eventBus().<JsonArray>request(Routes.GET_JSON_PATH_RESULT, keysArray, options, cf -> {
 
-				// sort map
-				LinkedHashMap<String, String> sortedMap = new LinkedHashMap<>();
+				JsonArray resultJsonObject = cf.result().body();
 
-				if (queryHolder.getSortOrder().equals("1")) {
-					unSortedMap.entrySet().stream().sorted(Map.Entry.comparingByValue())
-							.forEachOrdered(x -> sortedMap.put(x.getKey(), x.getValue()));
-				}
-				if (queryHolder.getSortOrder().equals("-1")) {
-					unSortedMap.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
-							.forEachOrdered(x -> sortedMap.put(x.getKey(), x.getValue()));
-				}
-
-				List<String> sortedIdsList = List.copyOf(sortedMap.keySet());
-				JsonArray res = new JsonArray(sortedIdsList);
-
-				message.reply(res);
+				message.reply(resultJsonObject);
 
 			});
 
