@@ -18,8 +18,7 @@ import org.nd.routes.Routes;
 import org.nd.threads.ExtractThread;
 import org.nd.threads.FilterThread;
 import org.nd.threads.SortValueGetterThread;
-import org.nd.utils.InverseValueComparator;
-import org.nd.utils.ValueComparator;
+import org.nd.utils.InverseComparator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -147,10 +146,10 @@ public class JsonPathVerticle extends AbstractVerticle {
 			SortedMap<String, List<String>> resultMap = null;
 			
 			if (queryHolder.getSortOrder().equals("1")) {
-				resultMap = new TreeMap<>( new ValueComparator());
+				resultMap = new TreeMap<>();
 			}
 			if (queryHolder.getSortOrder().equals("-1")) {
-				resultMap = new TreeMap<>(new InverseValueComparator());
+				resultMap = new TreeMap<>(new InverseComparator());
 			}
 			
 			for (int i = 0; i < keysArray.size(); i++) {
