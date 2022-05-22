@@ -21,7 +21,7 @@ import io.vertx.core.json.JsonObject;
 
 public class MainApplication {
 
-	private static Logger logger = LoggerFactory.getLogger(ServerVerticle.class);
+	private static Logger logger = LoggerFactory.getLogger(MainApplication.class);
 
 	public static void main(String[] args) {
 
