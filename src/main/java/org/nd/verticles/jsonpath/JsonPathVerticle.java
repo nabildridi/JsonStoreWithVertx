@@ -19,6 +19,7 @@ import org.nd.threads.ExtractThread;
 import org.nd.threads.FilterThread;
 import org.nd.threads.SortValueGetterThread;
 import org.nd.utils.InverseComparator;
+import org.nd.verticles.fs.FileSystemOperationsVerticle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,21 +77,18 @@ public class JsonPathVerticle extends AbstractVerticle {
 
 		// construct files index
 		filesMap = vertx.sharedData().getLocalMap("files");
-		List<String> ids = List.copyOf(filesMap.keySet());
 
 		boolean makePreload = config().getBoolean("cache_preload", false);
 		if (makePreload) {
+			List<String> ids = List.copyOf(filesMap.keySet());
 			// initial preloading
 			int preloadCount = Math.min(ids.size(), cachesSize);
 
 			for (int i = 0; i < preloadCount; i++) {
+				String id = ids.get(i);
 				try {
-					DocumentContext dc = getDocumentContext(ids.get(i));
-					documentContextCache.put(ids.get(i), dc);
-
-					Map<String, Object> fl = getFlatten(ids.get(i));
-					flattenCache.put(ids.get(i), fl);
-
+					documentContextCache.put(id,  getDocumentContext(id));
+					flattenCache.put(id, getFlatten(id));
 				} catch (Exception e) {
 				}
 			}
@@ -107,7 +105,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 
 	private DocumentContext getDocumentContext(String id) {
 		try {
-			return JsonPath.parse(filesMap.get(id));
+			return JsonPath.parse(FileSystemOperationsVerticle.fileCache.get(id));
 		} catch (Exception e) {
 			return null;
 		}
@@ -115,7 +113,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 
 	private Map<String, Object> getFlatten(String id) {
 		try {
-			return JsonFlattener.flattenAsMap(filesMap.get(id));
+			return JsonFlattener.flattenAsMap(FileSystemOperationsVerticle.fileCache.get(id));
 		} catch (Exception e) {
 			return null;
 		}
