@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -30,6 +31,8 @@ import com.github.wnameless.json.flattener.JsonFlattener;
 import com.github.wnameless.json.unflattener.JsonUnflattener;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.internal.Path;
+import com.jayway.jsonpath.internal.path.PathCompiler;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Context;
@@ -45,7 +48,6 @@ public class JsonPathVerticle extends AbstractVerticle {
 
 	private LoadingCache<String, DocumentContext> documentContextCache;
 	private LoadingCache<String, Map<String, Object>> flattenCache;
-	private LocalMap<String, String> filesMap;
 	private Integer cachesSize;
 
 	@Override
@@ -76,7 +78,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 				});
 
 		// construct files index
-		filesMap = vertx.sharedData().getLocalMap("files");
+		LocalMap<String, String> filesMap = vertx.sharedData().getLocalMap("files");
 
 		boolean makePreload = config().getBoolean("cache_preload", false);
 		if (makePreload) {
@@ -169,7 +171,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 			} catch (Exception e) {}
 
 			//construct final sorted list
-			List<String> sortedList = new ArrayList<String>();
+			List<String> sortedList = new LinkedList<String>();
 			for (List<String> ids : resultMap.values()) {
 				sortedList.addAll(ids);
 		    }		
@@ -185,6 +187,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 
 			JsonArray keysArray = message.body();
 			String jsonPathQuery = message.headers().get("JsonPathQuery");
+			JsonPath jsonPath =JsonPath.compile(jsonPathQuery); 
 			
 
 			ExecutorService executorService = Executors.newFixedThreadPool(64);
@@ -194,7 +197,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 			keysArray.forEach((id) -> {
 				String systemId = (String) id;
 				executorCompletionService
-						.submit(new FilterThread(systemId, jsonPathQuery, documentContextCache.get(systemId)));
+						.submit(new FilterThread(systemId, jsonPath, documentContextCache.get(systemId)));
 			});
 			
 

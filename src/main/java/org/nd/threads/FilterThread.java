@@ -4,11 +4,12 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 import com.jayway.jsonpath.DocumentContext;
+import com.jayway.jsonpath.JsonPath;
 
 public class FilterThread implements Callable<String> {
 	
 	private String id;
-	private String jonPathQuery;
+	private JsonPath jsonPath;
 	private DocumentContext dc;
 		
 
@@ -16,10 +17,10 @@ public class FilterThread implements Callable<String> {
 		super();
 	}
 
-	public FilterThread(String id, String jsonPathQuery, DocumentContext dc) {
+	public FilterThread(String id, JsonPath jsonPath, DocumentContext dc) {
 		super();
 		this.id = id;
-		this.jonPathQuery = jsonPathQuery;
+		this.jsonPath = jsonPath;
 		this.dc = dc;
 	}
 
@@ -29,7 +30,7 @@ public class FilterThread implements Callable<String> {
 	public String call() throws Exception {
 		
 		try {
-			Object results = dc.read(jonPathQuery);
+			Object results = dc.read(jsonPath);
 			if (results instanceof List) {
 				List<Object> list = (List) results;
 				if (list != null && list.size() > 0) {
