@@ -31,8 +31,6 @@ import com.github.wnameless.json.flattener.JsonFlattener;
 import com.github.wnameless.json.unflattener.JsonUnflattener;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.internal.Path;
-import com.jayway.jsonpath.internal.path.PathCompiler;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Context;
@@ -127,9 +125,8 @@ public class JsonPathVerticle extends AbstractVerticle {
 		jsonPathConsumer.handler(message -> {
 
 			JsonArray keysArray = message.body();
-			String jsonQueryStr = message.headers().get("jsonQuery");
-			JsonObject jsonQuery = new JsonObject(jsonQueryStr);
-			QueryHolder queryHolder = jsonQuery.mapTo(QueryHolder.class);
+			String queryHolderStr = message.headers().get("queryHolder");
+			QueryHolder queryHolder = new JsonObject(queryHolderStr).mapTo(QueryHolder.class);
 			
 
 			ExecutorService executorService = Executors.newFixedThreadPool(64);

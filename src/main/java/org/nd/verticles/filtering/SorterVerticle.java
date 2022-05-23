@@ -22,10 +22,10 @@ public class SorterVerticle extends AbstractVerticle {
 			JsonArray keysArray = message.body();
 
 			// queryHolder
-			String jsonQueryStr = message.headers().get("jsonQuery");
+			String queryHolderStr = message.headers().get("queryHolder");
 
 
-			DeliveryOptions options = new DeliveryOptions().addHeader("jsonQuery", jsonQueryStr);
+			DeliveryOptions options = new DeliveryOptions().addHeader("queryHolder", queryHolderStr);
 
 			vertx.eventBus().<JsonArray>request(Routes.GET_JSON_PATH_RESULT, keysArray, options, cf -> {
 

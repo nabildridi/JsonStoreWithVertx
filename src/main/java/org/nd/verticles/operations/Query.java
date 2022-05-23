@@ -108,7 +108,7 @@ public class Query extends AbstractVerticle {
 			return promise.future();
 		}
 		
-		//sort order must be "1" or "0"
+		//sort order must be "1" or "-1"
 		if(!queryHolder.getSortOrder().equals("1") && !queryHolder.getSortOrder().equals("-1")){
 			promise.complete(unsortedKeysArray);
 			return promise.future();
@@ -121,7 +121,7 @@ public class Query extends AbstractVerticle {
 		}
 
 		DeliveryOptions options = new DeliveryOptions();
-		options.addHeader("jsonQuery", JsonObject.mapFrom(queryHolder).encode());
+		options.addHeader("queryHolder", JsonObject.mapFrom(queryHolder).encode());
 
 		vertx.eventBus().<JsonArray>request(Routes.SORTER, unsortedKeysArray, options, ar -> {
 
