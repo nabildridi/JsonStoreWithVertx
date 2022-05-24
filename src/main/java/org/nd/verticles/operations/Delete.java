@@ -17,7 +17,6 @@ public class Delete extends AbstractVerticle {
 
 		MessageConsumer<JsonObject> consumer = vertx.eventBus().consumer(Routes.DELETE);
 		consumer.handler(message -> {
-			logger.debug("Starting...");
 
 			JsonObject json = message.body();
 			String id = message.headers().get("id");

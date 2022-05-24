@@ -18,7 +18,6 @@ public class SaveOrUpdate extends AbstractVerticle {
 
 		MessageConsumer<JsonObject> consumer = vertx.eventBus().consumer(Routes.SAVE_OR_UPDATE);
 		consumer.handler(message -> {
-			logger.debug("Starting...");
 
 			JsonObject json = message.body();
 			String systemId = null;

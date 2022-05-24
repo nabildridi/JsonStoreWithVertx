@@ -1,19 +1,13 @@
 package org.nd.verticles.fs;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.nd.routes.Routes;
+import org.nd.utils.CachesUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.CompositeFuture;
-import io.vertx.core.Future;
-import io.vertx.core.eventbus.Message;
 import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonArray;
-import io.vertx.core.json.JsonObject;
 
 public class FilesListsReaderVerticle extends AbstractVerticle {
 	private static Logger logger = LoggerFactory.getLogger(FilesListsReaderVerticle.class);
@@ -25,29 +19,12 @@ public class FilesListsReaderVerticle extends AbstractVerticle {
 
 			JsonArray idsPage = message.body();
 			
-			List<Future> futures = new ArrayList<Future>();
+			JsonArray jsonsArray = new JsonArray();
 			for (Object object : idsPage) {
 				String id = (String) object;				
-				futures.add(vertx.eventBus().request(Routes.READ_FILE_TO_JSON, id));
+				jsonsArray.add(CachesUtils.jsonFromCache(id));
 			}
-
-			CompositeFuture.all(futures).onComplete(ar -> {
-
-				if (ar.succeeded()) {
-					
-					JsonArray filesArray = new JsonArray();
-					for (Future<Message<JsonObject>> future : futures) {
-						if (future.succeeded()) {
-							filesArray.add(future.result().body());
-						}
-					}
-					
-					message.reply(filesArray);
-
-				} else {
-					message.fail(0, "Error");
-				}
-			});
+			message.reply(jsonsArray);
 
 		});
 

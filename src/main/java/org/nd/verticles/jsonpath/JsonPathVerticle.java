@@ -1,182 +1,33 @@
 package org.nd.verticles.jsonpath;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.concurrent.CompletionService;
-import java.util.concurrent.ExecutorCompletionService;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.Optional;
 
-import org.nd.dto.QueryHolder;
 import org.nd.routes.Routes;
-import org.nd.threads.ExtractThread;
-import org.nd.threads.FilterThread;
-import org.nd.threads.SortValueGetterThread;
-import org.nd.utils.InverseComparator;
-import org.nd.verticles.fs.FileSystemOperationsVerticle;
+import org.nd.utils.CachesUtils;
+import org.nd.verticles.rx.JsonArrayReducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.github.benmanes.caffeine.cache.CacheLoader;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.github.wnameless.json.flattener.JsonFlattener;
 import com.github.wnameless.json.unflattener.JsonUnflattener;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
 
+import io.reactivex.rxjava3.core.Observable;
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Context;
-import io.vertx.core.Promise;
-import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.core.shareddata.LocalMap;
 
 public class JsonPathVerticle extends AbstractVerticle {
 	private static Logger logger = LoggerFactory.getLogger(JsonPathVerticle.class);
 
-	private LoadingCache<String, DocumentContext> documentContextCache;
-	private LoadingCache<String, Map<String, Object>> flattenCache;
-	private Integer cachesSize;
-
-	@Override
-	public void init(Vertx vertx, Context context) {
-		super.init(vertx, context);
-
-		Instant start = Instant.now();
-
-		// set cache size
-		cachesSize = config().getInteger("cache_size");
-
-		documentContextCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofDays(7))
-				.build(new CacheLoader<String, DocumentContext>() {
-
-					@Override
-					public DocumentContext load(String id) throws Exception {
-						return getDocumentContext(id);
-					}
-				});
-
-		flattenCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofDays(7))
-				.build(new CacheLoader<String, Map<String, Object>>() {
-
-					@Override
-					public Map<String, Object> load(String id) throws Exception {
-						return getFlatten(id);
-					}
-				});
-
-		// construct files index
-		LocalMap<String, String> filesMap = vertx.sharedData().getLocalMap("files");
-
-		boolean makePreload = config().getBoolean("cache_preload", false);
-		if (makePreload) {
-			List<String> ids = List.copyOf(filesMap.keySet());
-			// initial preloading
-			int preloadCount = Math.min(ids.size(), cachesSize);
-
-			for (int i = 0; i < preloadCount; i++) {
-				String id = ids.get(i);
-				try {
-					documentContextCache.put(id,  getDocumentContext(id));
-					flattenCache.put(id, getFlatten(id));
-				} catch (Exception e) {
-				}
-			}
-
-			Instant end = Instant.now();
-			Duration timeElapsed = Duration.between(start, end);
-			logger.debug("JsonPath intialization completed; Time taken : " + timeElapsed.toSeconds() + " seconds");
-
-		}
-
-	}
-
 	// -----------------------------------------------------------------------------------------------------------------------------------------
 
-	private DocumentContext getDocumentContext(String id) {
-		try {
-			return JsonPath.parse(FileSystemOperationsVerticle.fileCache.get(id));
-		} catch (Exception e) {
-			return null;
-		}
-	}
-
-	private Map<String, Object> getFlatten(String id) {
-		try {
-			return JsonFlattener.flattenAsMap(FileSystemOperationsVerticle.fileCache.get(id));
-		} catch (Exception e) {
-			return null;
-		}
-	}
-
-	public void start(Promise<Void> startPromise) {
-
-		MessageConsumer<JsonArray> jsonPathConsumer = vertx.eventBus().consumer(Routes.GET_JSON_PATH_RESULT);
-		jsonPathConsumer.handler(message -> {
-
-			JsonArray keysArray = message.body();
-			String queryHolderStr = message.headers().get("queryHolder");
-			QueryHolder queryHolder = new JsonObject(queryHolderStr).mapTo(QueryHolder.class);
-			
-
-			ExecutorService executorService = Executors.newFixedThreadPool(64);
-			CompletionService<Map.Entry<String, String>> executorCompletionService = new ExecutorCompletionService<Map.Entry<String, String>>(
-					executorService);
-
-			keysArray.forEach((id) -> {
-				String systemId = (String) id;
-				executorCompletionService
-						.submit(new SortValueGetterThread(systemId, queryHolder.getSortField(), flattenCache.get(systemId)));
-			});
-
-			
-			SortedMap<String, List<String>> resultMap = null;
-			
-			if (queryHolder.getSortOrder().equals("1")) {
-				resultMap = new TreeMap<>();
-			}
-			if (queryHolder.getSortOrder().equals("-1")) {
-				resultMap = new TreeMap<>(new InverseComparator());
-			}
-			
-			for (int i = 0; i < keysArray.size(); i++) {
-				try {
-					Map.Entry<String, String> entry = executorCompletionService.take().get();
-					String sortedMapKey = entry.getValue();
-					if(!resultMap.containsKey(sortedMapKey)) {
-						resultMap.put(sortedMapKey,new ArrayList<String>());
-					}
-					resultMap.get(sortedMapKey).add(entry.getKey());
-				} catch (Exception e) {
-				}
-			}
-			
-			
-			
-			try {
-				executorService.shutdown();
-			} catch (Exception e) {}
-
-			//construct final sorted list
-			List<String> sortedList = new LinkedList<String>();
-			for (List<String> ids : resultMap.values()) {
-				sortedList.addAll(ids);
-		    }		
-								
-			
-			message.reply( new JsonArray(sortedList) );
-
-		});
+	public void start() {
 
 		// ------------------------------------------------------------------------------------------------------------------------
 		MessageConsumer<JsonArray> hasJsonPathConsumer = vertx.eventBus().consumer(Routes.CHECK);
@@ -184,65 +35,37 @@ public class JsonPathVerticle extends AbstractVerticle {
 
 			JsonArray keysArray = message.body();
 			String jsonPathQuery = message.headers().get("JsonPathQuery");
-			JsonPath jsonPath =JsonPath.compile(jsonPathQuery); 
-			
-
-			ExecutorService executorService = Executors.newFixedThreadPool(64);
-			CompletionService<String> executorCompletionService = new ExecutorCompletionService<String>(
-					executorService);
-
-			keysArray.forEach((id) -> {
-				String systemId = (String) id;
-				executorCompletionService
-						.submit(new FilterThread(systemId, jsonPath, documentContextCache.get(systemId)));
-			});
-			
-
+			JsonPath jsonPath = JsonPath.compile(jsonPathQuery);
 			JsonArray result = new JsonArray();
-			for (int i = 0; i < keysArray.size(); i++) {
-				try {
-					String id = executorCompletionService.take().get();
-					if(id!=null)result.add(id);
-				} catch (Exception e) {
+
+			Observable.just(keysArray).flatMapIterable(id -> id).map(id -> {
+
+				String systemId = (String) id;
+				DocumentContext dc = CachesUtils.documentContextFromCache(systemId);
+				Object results = dc.read(jsonPath);
+				Optional<String> jsonPathResult = Optional.empty();
+				if (results != null) {
+					if (results instanceof List) {
+						if ( !((List)results).isEmpty()) {
+							jsonPathResult = Optional.of(systemId);
+						}
+					} else {
+
+						jsonPathResult = Optional.of(systemId);
+
+					}
 				}
-			}
-			
-			try {
-				executorService.shutdown();
-			} catch (Exception e) {}
+				return jsonPathResult;
 
-			message.reply(result);
-
-		});
-
-		// ------------------------------------------------------------------------------------------------------------------------
-		MessageConsumer<String> JsonPathInvalidateConsumer = vertx.eventBus().consumer(Routes.JSON_PATH_INVALIDATE);
-		JsonPathInvalidateConsumer.handler(message -> {
-
-			String id = message.body();
-			String reload = message.headers().get("needReoald");
-
-			if (documentContextCache.getIfPresent(id) != null) {
-				documentContextCache.invalidate(id);
-			}
-
-			if (flattenCache.getIfPresent(id) != null) {
-				flattenCache.invalidate(id);
-			}
-
-			if (reload.equals("true")) {
-				documentContextCache.get(id);
-				flattenCache.get(id);
-			}
-
-			message.reply(true);
+			}).reduce(result, new JsonArrayReducer()).subscribe(jsonArray -> {
+				message.reply(jsonArray);
+			});
 
 		});
 
 		// ------------------------------------------------------------------------------------------------------------------------
 		MessageConsumer<Object> extractCconsumer = vertx.eventBus().consumer(Routes.EXTRACT);
 		extractCconsumer.handler(message -> {
-			logger.debug("Starting...");
 
 			Object container = message.body();
 			String pathToExtract = message.headers().get("pathToExtract");
@@ -261,36 +84,29 @@ public class JsonPathVerticle extends AbstractVerticle {
 			if (container instanceof JsonArray) {
 
 				JsonArray jsonsList = (JsonArray) container;
-				ExecutorService executorService = Executors.newFixedThreadPool(64);
-				CompletionService<JsonObject> executorCompletionService = new ExecutorCompletionService<JsonObject>(
-						executorService);
-
-				
-				for (int i = 0; i < jsonsList.size(); i++) {
-					JsonObject jo = jsonsList.getJsonObject(i);
-					// get system id
-					String systemId = jo.getString("_systemId");
-					
-					executorCompletionService
-					.submit(new ExtractThread(systemId, fragmentsNames, flattenCache.get(systemId)));
-				}
-				
-				
 				JsonArray result = new JsonArray();
-				for (int i = 0; i < jsonsList.size(); i++) {
-					try {
-						result.add(executorCompletionService.take().get());
-					} catch (Exception e) {
+
+				Observable.just(jsonsList).flatMapIterable(object -> object).map(object -> {
+
+					JsonObject jo = (JsonObject) object;
+					String systemId = jo.getString("_systemId");
+					Map<String, Object> flattenJson = CachesUtils.flattenFromCache(systemId);
+					Map<String, Object> output = new HashMap<String, Object>();
+
+					for (String frName : fragmentsNames) {
+						Object value = flattenJson.get(frName);
+						if (value != null)
+							output.put(frName, value);
 					}
-				}
-				
-				try {
-					executorService.shutdown();
-				} catch (Exception e) {}
-				
-				
-				
-				message.reply(result);
+					output.put("_systemId", systemId);
+					String outputJson = JsonUnflattener.unflatten(output);
+					Optional<JsonObject> extractResult = Optional.of(new JsonObject(outputJson));
+					return extractResult;
+
+				}).reduce(result, new JsonArrayReducer()).subscribe(jsonArray -> {
+					message.reply(jsonArray);
+				});
+
 			}
 
 			// if input is a jsonObject
@@ -301,7 +117,7 @@ public class JsonPathVerticle extends AbstractVerticle {
 				String systemId = jo.getString("_systemId");
 				Map<String, Object> output = new HashMap<String, Object>();
 				for (String frName : fragmentsNames) {
-					Object value = flattenCache.get(systemId).get(frName);
+					Object value = CachesUtils.flattenFromCache(systemId).get(frName);
 					if (value != null)
 						output.put(frName, value);
 				}
@@ -314,8 +130,6 @@ public class JsonPathVerticle extends AbstractVerticle {
 			}
 
 		});
-
-		startPromise.complete();
 
 	}
 

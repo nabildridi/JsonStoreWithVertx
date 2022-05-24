@@ -2,6 +2,7 @@ package org.nd.verticles;
 
 import org.nd.dto.QueryHolder;
 import org.nd.routes.Routes;
+import org.nd.utils.CachesUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,38 +51,37 @@ public class ServerVerticle extends AbstractVerticle {
 			QueryHolder queryHolder = new QueryHolder(ctx.queryParams());
 
 			// get file
-			eventBus.<JsonObject>request(Routes.READ_FILE_TO_JSON, id, ar -> {
-				HttpServerResponse response = ctx.response();
+			JsonObject json = CachesUtils.jsonFromCache(id);
 
-				if (ar.succeeded()) {
+			HttpServerResponse response = ctx.response();
+			if (json != null) {
 
-					// if extarct path found try to extract element
-					if (queryHolder.getExtract() != null && !queryHolder.getExtract().isEmpty()) {
+				// if extarct path found try to extract element
+				if (queryHolder.getExtract() != null && !queryHolder.getExtract().isEmpty()) {
 
-						DeliveryOptions options = new DeliveryOptions().addHeader("pathToExtract",
-								queryHolder.getExtract());
-						eventBus.<JsonObject>request(Routes.EXTRACT, ar.result().body(), options, zr -> {
-							response.putHeader("content-type", "application/json");
-							response.end(zr.result().body().encodePrettily());
-						});
-
-					} else {
+					DeliveryOptions options = new DeliveryOptions().addHeader("pathToExtract",
+							queryHolder.getExtract());
+					eventBus.<JsonObject>request(Routes.EXTRACT, json, options, zr -> {
 						response.putHeader("content-type", "application/json");
-						response.end(ar.result().body().encodePrettily());
-					}
+						response.end(zr.result().body().encodePrettily());
+					});
 
 				} else {
-					response.setStatusCode(404).setStatusMessage("id not found").end();
+					response.putHeader("content-type", "application/json");
+					response.end(json.encodePrettily());
 				}
-
-			});
+			} else {
+				response.setStatusCode(404).setStatusMessage("Id not found").end();
+			}
 
 		});
 
 		// query documents : pagination, sorting and filtering
-		router.post("/query").consumes("*/json").handler(ctx -> {
+		router.post("/query").consumes("*/json").handler(ctx ->
 
-			JsonObject query = Try.apply(() -> ctx.getBodyAsJson()).getOrElse(null);
+		{
+
+			JsonObject query = Try.apply(() -> ctx.body().asJsonObject()).getOrElse(null);
 
 			if (query != null) {
 
@@ -107,7 +107,7 @@ public class ServerVerticle extends AbstractVerticle {
 		// add or full update document
 		router.post("/").consumes("*/json").handler(ctx -> {
 
-			JsonObject json = Try.apply(() -> ctx.getBodyAsJson()).getOrElse(null);
+			JsonObject json = Try.apply(() -> ctx.body().asJsonObject()).getOrElse(null);
 
 			if (json != null) {
 
@@ -130,7 +130,7 @@ public class ServerVerticle extends AbstractVerticle {
 		// partial update
 		router.put("/").handler(ctx -> {
 
-			JsonObject partialJson = Try.apply(() -> ctx.getBodyAsJson()).getOrElse(null);
+			JsonObject partialJson = Try.apply(() -> ctx.body().asJsonObject()).getOrElse(null);
 
 			// if json is invalid --> exit
 			if (partialJson == null) {
@@ -161,7 +161,7 @@ public class ServerVerticle extends AbstractVerticle {
 			String[] pathFragments = path.substring(1).split("/");
 			String id = pathFragments[0];
 
-			JsonObject json = Try.apply(() -> ctx.getBodyAsJson()).getOrElse(null);
+			JsonObject json = Try.apply(() -> ctx.body().asJsonObject()).getOrElse(null);
 
 			// if json is invalid --> exit
 			if (json == null && id.isEmpty()) {

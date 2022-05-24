@@ -3,9 +3,9 @@ package org.nd;
 import org.nd.verticles.ServerVerticle;
 import org.nd.verticles.filtering.FilterVerticle;
 import org.nd.verticles.filtering.SorterVerticle;
+import org.nd.verticles.fs.FileSystemOperationsVerticle;
 import org.nd.verticles.fs.FilesListsReaderVerticle;
 import org.nd.verticles.jsonpath.JsonPathVerticle;
-import org.nd.verticles.fs.FileSystemOperationsVerticle;
 import org.nd.verticles.operations.Delete;
 import org.nd.verticles.operations.PartialUpdate;
 import org.nd.verticles.operations.Query;
@@ -32,26 +32,25 @@ public class MainApplication {
 		ConfigRetriever retriever = ConfigRetriever.create(vertx);
 		retriever.getConfig(json -> {
 			JsonObject configObject = json.result();
-			
-			vertx.deployVerticle(FileSystemOperationsVerticle.class.getName(), new DeploymentOptions().setConfig(configObject), res ->{
-				
-				vertx.deployVerticle(JsonPathVerticle.class.getName(), new DeploymentOptions().setConfig(configObject), res2 ->{
-					
-					vertx.deployVerticle(ServerVerticle.class.getName(), new DeploymentOptions().setConfig(configObject));
-					
-					vertx.deployVerticle(SaveOrUpdate.class.getName());
-					vertx.deployVerticle(Delete.class.getName());
-					vertx.deployVerticle(Query.class.getName());
-					vertx.deployVerticle(PartialUpdate.class.getName());
-					
-					vertx.deployVerticle(FilesListsReaderVerticle.class.getName());	
-					
-					vertx.deployVerticle(SorterVerticle.class.getName());
-					vertx.deployVerticle(FilterVerticle.class.getName());	
-					
-				});		
-				
-			});		
+
+			vertx.deployVerticle(FileSystemOperationsVerticle.class.getName(),
+					new DeploymentOptions().setConfig(configObject), res -> {
+
+						vertx.deployVerticle(ServerVerticle.class.getName(),
+								new DeploymentOptions().setConfig(configObject));
+						vertx.deployVerticle(JsonPathVerticle.class.getName());
+
+						vertx.deployVerticle(SaveOrUpdate.class.getName());
+						vertx.deployVerticle(Delete.class.getName());
+						vertx.deployVerticle(Query.class.getName());
+						vertx.deployVerticle(PartialUpdate.class.getName());
+
+						vertx.deployVerticle(FilesListsReaderVerticle.class.getName());
+
+						vertx.deployVerticle(SorterVerticle.class.getName());
+						vertx.deployVerticle(FilterVerticle.class.getName());
+
+					});
 
 		});
 

@@ -25,7 +25,6 @@ public class Query extends AbstractVerticle {
 
 		MessageConsumer<JsonObject> consumer = vertx.eventBus().consumer(Routes.QUERY);
 		consumer.handler(message -> {
-			logger.debug("Starting...");
 
 			JsonObject jsonQuery = message.body();
 			QueryHolder queryHolder = jsonQuery.mapTo(QueryHolder.class);
@@ -59,9 +58,6 @@ public class Query extends AbstractVerticle {
 
 			// if filter not null
 			if (Utils.notNullAndNotEmpty( queryHolder.getFilter())) {
-
-				logger.debug("filtering....");
-
 
 				vertx.eventBus().<JsonArray>request(Routes.FILTER, queryHolder.getFilter(), at -> {
 					if (at.succeeded()) {

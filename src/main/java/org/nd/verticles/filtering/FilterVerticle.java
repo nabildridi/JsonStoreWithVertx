@@ -19,7 +19,6 @@ public class FilterVerticle extends AbstractVerticle {
 
 		MessageConsumer<String> consumer = vertx.eventBus().consumer(Routes.FILTER);
 		consumer.handler(message -> {
-			logger.debug("Starting...");
 
 			String JsonPathQuery = message.body();
 
