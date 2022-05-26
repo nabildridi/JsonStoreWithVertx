@@ -2,7 +2,6 @@ package org.nd.verticles;
 
 import org.nd.dto.QueryHolder;
 import org.nd.routes.Routes;
-import org.nd.utils.CachesUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,32 +46,21 @@ public class ServerVerticle extends AbstractVerticle {
 		// get by id
 		router.get("/:id").handler(ctx -> {
 
-			String id = ctx.pathParam("id");
+			String systemId = ctx.pathParam("id");
 			QueryHolder queryHolder = new QueryHolder(ctx.queryParams());
-
-			// get file
-			JsonObject json = CachesUtils.jsonFromCache(id);
+			JsonObject queryJson = JsonObject.mapFrom(queryHolder);
+			DeliveryOptions options = new DeliveryOptions().addHeader("systemId", systemId);
 
 			HttpServerResponse response = ctx.response();
-			if (json != null) {
-
-				// if extarct path found try to extract element
-				if (queryHolder.getExtract() != null && !queryHolder.getExtract().isEmpty()) {
-
-					DeliveryOptions options = new DeliveryOptions().addHeader("pathToExtract",
-							queryHolder.getExtract());
-					eventBus.<JsonObject>request(Routes.EXTRACT, json, options, zr -> {
-						response.putHeader("content-type", "application/json");
-						response.end(zr.result().body().encodePrettily());
-					});
-
-				} else {
+			eventBus.<JsonObject>request(Routes.GET_ONE, queryJson, options, ar -> {
+				if (ar.succeeded()) {
 					response.putHeader("content-type", "application/json");
-					response.end(json.encodePrettily());
+					response.end(ar.result().body().encodePrettily());
+				} else {
+					response.setStatusCode(404).setStatusMessage("Id not found").end();
 				}
-			} else {
-				response.setStatusCode(404).setStatusMessage("Id not found").end();
-			}
+
+			});
 
 		});
 

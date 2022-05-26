@@ -1,162 +1,139 @@
 package org.nd.verticles.fs;
 
-import java.io.File;
-import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
+import org.nd.dto.QueryHolder;
+import org.nd.managers.CachesManger;
+import org.nd.managers.KvDatabaseManger;
 import org.nd.routes.Routes;
-import org.nd.utils.CachesUtils;
+import org.nd.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.spotify.sparkey.Sparkey;
-import com.spotify.sparkey.SparkeyReader;
-import com.spotify.sparkey.SparkeyWriter;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Context;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.shareddata.LocalMap;
 
 public class FileSystemOperationsVerticle extends AbstractVerticle {
-	private static Logger logger = LoggerFactory.getLogger(FileSystemOperationsVerticle.class);
+    private static Logger logger = LoggerFactory.getLogger(FileSystemOperationsVerticle.class);
 
-	private String storeFolderPath;
+    private LocalMap<String, String> filesMap;
 
-	private LocalMap<String, String> filesMap;
+    @Override
+    public void init(Vertx vertx, Context context) {
+	super.init(vertx, context);
 
-	private SparkeyWriter kvWriter;
-	private SparkeyReader kvReader;
-	private File kvIndexFile = null;
+	Instant start = Instant.now();
+	filesMap = vertx.sharedData().getLocalMap("files");
 
-	@Override
-	public void init(Vertx vertx, Context context) {
-		super.init(vertx, context);
+	// init kv database
+	KvDatabaseManger.init(config(), filesMap);
 
-		Instant start = Instant.now();
+	// init caches
+	List<String> ids = List.copyOf(filesMap.keySet());
+	CachesManger.init(config(), ids);
 
-		storeFolderPath = config().getString("store_fs_path");
-		logger.debug("store folder path from the config file : " + storeFolderPath);
+	Instant end = Instant.now();
+	Duration timeElapsed = Duration.between(start, end);
+	logger.debug("intialization completed; Time taken : " + timeElapsed.toSeconds() + " seconds");
 
-		// default value
-		if (storeFolderPath == null) {
-			String userHomeDir = System.getProperty("user.home");
-			storeFolderPath = userHomeDir + File.separator + ".jsonStore";
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------------------------------
+
+    public void start(Promise<Void> startPromise) {
+
+	// ------------------------------------------------------------------------------------------------------------------------
+
+	MessageConsumer<JsonObject> getOneConsumer = vertx.eventBus().consumer(Routes.GET_ONE);
+	getOneConsumer.handler(message -> {
+
+	    String systemId = message.headers().get("systemId");
+	    JsonObject jsonQuery = message.body();
+	    QueryHolder queryHolder = jsonQuery.mapTo(QueryHolder.class);
+
+	    JsonObject json = CachesManger.jsonFromCache(systemId);
+
+	    if (json != null) {
+
+		// if extarct path found try to extract element
+		if (Utils.notNullAndNotEmpty(queryHolder.getExtract())) {
+
+		    DeliveryOptions options = new DeliveryOptions().addHeader("pathToExtract",
+			    queryHolder.getExtract());
+		    vertx.eventBus().<JsonObject>request(Routes.EXTRACT, json, options, zr -> {
+			JsonObject extracted = zr.result().body();
+			message.reply(extracted);
+		    });
+
+		} else {
+		    message.reply(json);
 		}
+	    } else {
+		message.fail(0, "Error getting one : " + systemId);
+	    }
 
-		// create json store folder is absent
-		if (!vertx.fileSystem().existsBlocking(storeFolderPath)) {
-			logger.debug("creating store folder in " + storeFolderPath);
-			vertx.fileSystem().mkdirsBlocking(storeFolderPath);
-		}
+	});
 
-		// init kv database
-		kvIndexFile = new File(storeFolderPath + File.separator + "jsonStoreData.spi");
+	// ------------------------------------------------------------------------------------------------------------------------
 
-		try {
-			if (!kvIndexFile.exists()) {
-				logger.debug("Creating new file: " + kvIndexFile.getName());
-				kvWriter = Sparkey.createNew(kvIndexFile);
-				kvWriter.flush();
-				kvWriter.writeHash();
-			} else {
-				kvWriter = Sparkey.append(kvIndexFile);
-			}
-		} catch (IOException e1) {
-			e1.printStackTrace();
-		}
+	MessageConsumer<JsonObject> saveConsumer = vertx.eventBus().consumer(Routes.SAVE_TO_FS);
+	saveConsumer.handler(message -> {
 
-		try {
-			kvReader = Sparkey.open(kvIndexFile);
-		} catch (IOException e2) {
-			e2.printStackTrace();
-		}
+	    String systemId = message.headers().get("systemId");
+	    String operation = message.headers().get("operation");
+	    JsonObject json = message.body();
 
-		// construct files index
-		filesMap = vertx.sharedData().getLocalMap("files");
-		try {
-			for (SparkeyReader.Entry entry : kvReader) {
-				String id = entry.getKeyAsString();
-				filesMap.put(id, "");
-			}
-		} catch (Exception e1) {
-		}
+	    try {
 
-		logger.debug("Json documents number :" + filesMap.keySet().size());
+		// refresh kv database
+		KvDatabaseManger.writeAndFlush(systemId, json.encode());
+		// refresh cache
+		CachesManger.invalidate(systemId, true);
+		filesMap.put(systemId, "");
 
-		// init caches
-		List<String> ids = List.copyOf(filesMap.keySet());
-		CachesUtils.init(kvReader, config(), ids);
+		message.reply(true);
+	    } catch (Exception e) {
+		e.printStackTrace();
+		message.fail(0, "Error saving : " + systemId);
+	    }
 
-		Instant end = Instant.now();
-		Duration timeElapsed = Duration.between(start, end);
-		logger.debug("intialization completed; Time taken : " + timeElapsed.toSeconds() + " seconds");
+	});
+	// -------------------------------------------------------------------------------------------------------------------
 
-	}
+	MessageConsumer<JsonObject> deleteConsumer = vertx.eventBus().consumer(Routes.DELETE_FROM_FS);
+	deleteConsumer.handler(message -> {
 
-	// -----------------------------------------------------------------------------------------------------------------------------------------
+	    String systemId = message.headers().get("systemId");
 
-	public void start(Promise<Void> startPromise) {
+	    try {
 
-		// ------------------------------------------------------------------------------------------------------------------------
+		// remove from kv database
+		KvDatabaseManger.deleteAndFlush(systemId);
 
-		MessageConsumer<JsonObject> saveConsumer = vertx.eventBus().consumer(Routes.SAVE_TO_FS);
-		saveConsumer.handler(message -> {
-			logger.debug("saving to file sytem...");
+		filesMap.remove(systemId);
 
-			String systemId = message.headers().get("systemId");
-			String operation = message.headers().get("operation");
-			JsonObject json = message.body();
+		// remove from cache
+		CachesManger.invalidate(systemId, false);
 
-			try {
-				kvWriter.put(systemId, json.encode());
-				kvWriter.flush();
-				kvWriter.writeHash();
+		message.reply(true);
 
-				// refresh cache
-				CachesUtils.invalidate(systemId, true);
+	    } catch (Exception e) {
+		e.printStackTrace();
+		message.fail(0, "Error removing : " + systemId);
+	    }
 
-				message.reply(true);
-			} catch (IOException e) {
-				e.printStackTrace();
-				message.fail(0, "Error saving : " + systemId);
-			}
+	});
 
-		});
-		// -------------------------------------------------------------------------------------------------------------------
+	startPromise.complete();
 
-		MessageConsumer<JsonObject> deleteConsumer = vertx.eventBus().consumer(Routes.DELETE_FROM_FS);
-		deleteConsumer.handler(message -> {
-			logger.debug("deleteing from file sytem...");
-
-			String systemId = message.headers().get("systemId");
-
-			try {
-				kvWriter.delete(systemId);
-				kvWriter.flush();
-				kvWriter.writeHash();
-
-				filesMap.remove(systemId);
-
-				// remove from cache
-				CachesUtils.invalidate(systemId, false);
-
-				message.reply(true);
-
-			} catch (IOException e) {
-				e.printStackTrace();
-				message.fail(0, "Error removing : " + systemId);
-			}
-
-		});
-
-		startPromise.complete();
-
-	}
+    }
 
 }

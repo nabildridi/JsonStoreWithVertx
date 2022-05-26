@@ -7,7 +7,9 @@
 
 	<logger name="io.netty" level="error" />
 	<logger name="com.jayway" level="error" />
-	<logger name="io.vertx.ext.web" level="error" />	
+	<logger name="io.vertx.ext.web" level="error" />
+	<logger name="jetbrains.exodus" level="error" />
+		
 
   <root level="debug">
     <appender-ref ref="STDOUT" />

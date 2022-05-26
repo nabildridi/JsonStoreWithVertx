@@ -1,4 +1,4 @@
-package org.nd.utils;
+package org.nd.managers;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -14,61 +14,31 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.wnameless.json.flattener.JsonFlattener;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
-import com.spotify.sparkey.SparkeyReader;
 
 import io.vertx.core.json.JsonObject;
 
-public class CachesUtils {
-	private static Logger logger = LoggerFactory.getLogger(CachesUtils.class);
+public class CachesManger {
+	private static Logger logger = LoggerFactory.getLogger(CachesManger.class);
 
 	private static LoadingCache<String, String> fileCache;
 	private static LoadingCache<String, JsonObject> jsonObjectCache;
 	private static LoadingCache<String, DocumentContext> documentContextCache;
 	private static LoadingCache<String, Map<String, Object>> flattenCache;
-	private static SparkeyReader kvReader;
 
-	public static void init(SparkeyReader reader, JsonObject config, List<String> ids) {
+	public static void init(JsonObject config, List<String> ids) {
 
 		Instant start = Instant.now();
 
-		kvReader = reader;
 		Integer cachesSize = config.getInteger("cache_size");
 
-		fileCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofDays(7))
-				.build(new CacheLoader<String, String>() {
+		fileCache = Caffeine.newBuilder().maximumSize(cachesSize).build(key -> getFile(key));
 
-					@Override
-					public String load(String id) throws Exception {
-						return getFile(id);
-					}
-				});
+		jsonObjectCache = Caffeine.newBuilder().maximumSize(cachesSize).build(key -> getJsonObject(key));
 
-		jsonObjectCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofDays(7))
-				.build(new CacheLoader<String, JsonObject>() {
+		documentContextCache = Caffeine.newBuilder().maximumSize(cachesSize).build(key -> getDocumentContext(key));
 
-					@Override
-					public JsonObject load(String id) throws Exception {
-						return getJsonObject(id);
-					}
-				});
-
-		documentContextCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofDays(7))
-				.build(new CacheLoader<String, DocumentContext>() {
-
-					@Override
-					public DocumentContext load(String id) throws Exception {
-						return getDocumentContext(id);
-					}
-				});
-
-		flattenCache = Caffeine.newBuilder().maximumSize(cachesSize).expireAfterAccess(Duration.ofDays(7))
-				.build(new CacheLoader<String, Map<String, Object>>() {
-
-					@Override
-					public Map<String, Object> load(String id) throws Exception {
-						return getFlatten(id);
-					}
-				});
+		flattenCache = Caffeine.newBuilder().maximumSize(cachesSize).build(key -> getFlatten(key));
+				
 
 		boolean makePreload = config.getBoolean("cache_preload", false);
 		if (makePreload) {
@@ -97,17 +67,15 @@ public class CachesUtils {
 
 	// -----------------------------------------------------------------------------------------------------------------------------------------
 
+	// -----------------------------------------------------------------------------------------------------------------------------------------
+
 	private static String getFile(String id) {
-		try {
-			return kvReader.getAsString(id);
-		} catch (Exception e) {
-			return null;
-		}
+		return KvDatabaseManger.read(id);
 	}
 
 	private static JsonObject getJsonObject(String id) {
 		try {
-			return new JsonObject(getFile(id));
+			return new JsonObject(fileCache.get(id));
 		} catch (Exception e) {
 			return null;
 		}
@@ -115,7 +83,7 @@ public class CachesUtils {
 
 	private static DocumentContext getDocumentContext(String id) {
 		try {
-			return JsonPath.parse(getFile(id));
+			return JsonPath.parse(fileCache.get(id));
 		} catch (Exception e) {
 			return null;
 		}
@@ -123,11 +91,12 @@ public class CachesUtils {
 
 	private static Map<String, Object> getFlatten(String id) {
 		try {
-			return JsonFlattener.flattenAsMap(getFile(id));
+			return JsonFlattener.flattenAsMap(fileCache.get(id));
 		} catch (Exception e) {
 			return null;
 		}
 	}
+
 	// -----------------------------------------------------------------------------------------------------------------------------------------
 	public static String stringFromCache(String id) {
 		try {
@@ -138,6 +107,7 @@ public class CachesUtils {
 		}
 
 	}
+
 	// ------------------------------------------------------------------------------------------------------------------------
 	// -----------------------------------------------------------------------------------------------------------------------------------------
 	public static JsonObject jsonFromCache(String id) {
@@ -149,6 +119,7 @@ public class CachesUtils {
 		}
 
 	}
+
 	// ------------------------------------------------------------------------------------------------------------------------
 	// -----------------------------------------------------------------------------------------------------------------------------------------
 	public static Map<String, Object> flattenFromCache(String id) {
@@ -160,6 +131,7 @@ public class CachesUtils {
 		}
 
 	}
+
 	// ------------------------------------------------------------------------------------------------------------------------
 	// -----------------------------------------------------------------------------------------------------------------------------------------
 	public static DocumentContext documentContextFromCache(String id) {
@@ -171,6 +143,7 @@ public class CachesUtils {
 		}
 
 	}
+
 	// ------------------------------------------------------------------------------------------------------------------------
 	// -----------------------------------------------------------------------------------------------------------------------------------------
 	public static void invalidate(String id, boolean reload) {
@@ -191,14 +164,13 @@ public class CachesUtils {
 		}
 
 		if (reload) {
-			fileCache.get(id);
-			jsonObjectCache.get(id);
-			documentContextCache.get(id);
-			flattenCache.get(id);
+			fileCache.put(id, getFile(id));
+			jsonObjectCache.put(id, getJsonObject(id));
+			documentContextCache.put(id, getDocumentContext(id));
+			flattenCache.put(id, getFlatten(id));
 		}
 
 	}
 	// ------------------------------------------------------------------------------------------------------------------------
-
-
+	
 }

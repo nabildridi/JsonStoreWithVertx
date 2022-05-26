@@ -1,11 +1,11 @@
 package org.nd;
 
 import org.nd.verticles.ServerVerticle;
+import org.nd.verticles.filtering.ExtractorVerticle;
 import org.nd.verticles.filtering.FilterVerticle;
 import org.nd.verticles.filtering.SorterVerticle;
 import org.nd.verticles.fs.FileSystemOperationsVerticle;
 import org.nd.verticles.fs.FilesListsReaderVerticle;
-import org.nd.verticles.jsonpath.JsonPathVerticle;
 import org.nd.verticles.operations.Delete;
 import org.nd.verticles.operations.PartialUpdate;
 import org.nd.verticles.operations.Query;
@@ -38,7 +38,7 @@ public class MainApplication {
 
 						vertx.deployVerticle(ServerVerticle.class.getName(),
 								new DeploymentOptions().setConfig(configObject));
-						vertx.deployVerticle(JsonPathVerticle.class.getName());
+						vertx.deployVerticle(ExtractorVerticle.class.getName());
 
 						vertx.deployVerticle(SaveOrUpdate.class.getName());
 						vertx.deployVerticle(Delete.class.getName());
