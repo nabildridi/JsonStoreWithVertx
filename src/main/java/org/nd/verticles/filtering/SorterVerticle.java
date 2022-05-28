@@ -1,8 +1,7 @@
 package org.nd.verticles.filtering;
 
+import java.util.Comparator;
 import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.nd.dto.QueryHolder;
@@ -13,8 +12,10 @@ import org.nd.verticles.rx.SortedMapReducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.Multimap;
+import com.google.common.collect.TreeMultimap;
+
 import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.schedulers.Schedulers;
 import io.vavr.control.Try;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.MessageConsumer;
@@ -36,19 +37,18 @@ public class SorterVerticle extends AbstractVerticle {
 	    String queryHolderStr = message.headers().get("queryHolder");
 	    QueryHolder queryHolder = new JsonObject(queryHolderStr).mapTo(QueryHolder.class);
 
-	    SortedMap<String, JsonArray> resultMap = null;
-
+	    Multimap<String, String> resultMap = null;
+	    Comparator<String> natural = Comparator.<String>naturalOrder();
+	    
 	    if (queryHolder.getSortOrder().equals("1")) {
-		resultMap = new TreeMap<>();
+		resultMap = TreeMultimap.create();
 	    }
 	    if (queryHolder.getSortOrder().equals("-1")) {
-		resultMap = new TreeMap<>(new InverseComparator());
+		resultMap = TreeMultimap.create(new InverseComparator(), natural);
 	    }
 
 	    Flowable
 	    .fromIterable(keysArray)
-	    .parallel()
-	    .runOn(Schedulers.io())
 	    .map(id -> String.valueOf(id))
 		    .map(systemId -> Pair.of(CachesManger.flattenFromCache(systemId), systemId))
 		    .map(pair -> {
@@ -58,14 +58,13 @@ public class SorterVerticle extends AbstractVerticle {
 			String result = Try.of(() -> String.valueOf( flattenJson.get(queryHolder.getSortField())) ).getOrElse("");
 			return Pair.of(systemId, result);
 		    })
-		    .sequential()
 		    .reduce(resultMap, new SortedMapReducer())
 		    .subscribe(sortedMap -> {
-			JsonArray jsonArray = new JsonArray();
-			for (JsonArray ids : sortedMap.values()) {
-			    jsonArray.addAll(ids);
-			}
-			message.reply(jsonArray);
+			
+			JsonArray jsonArray = new JsonArray();			
+			sortedMap.values().forEach(item -> jsonArray.add(item));
+			message.reply( jsonArray);
+			
 		    });
 
 	});

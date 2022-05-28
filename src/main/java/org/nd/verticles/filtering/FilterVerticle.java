@@ -13,7 +13,6 @@ import org.slf4j.LoggerFactory;
 import com.jayway.jsonpath.JsonPath;
 
 import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.schedulers.Schedulers;
 import io.vavr.control.Try;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.MessageConsumer;
@@ -35,8 +34,11 @@ public class FilterVerticle extends AbstractVerticle {
 	    JsonPath jsonPath = Try.of(() -> JsonPath.compile(JsonPathQuery)).getOrNull();
 	    JsonArray result = new JsonArray();
 
-	    Flowable.fromIterable(keysList).parallel().runOn(Schedulers.io()).map(id -> String.valueOf(id))
-		    .map(systemId -> Pair.of(CachesManger.documentContextFromCache(systemId), systemId)).map(pair -> {
+	    Flowable
+	    .fromIterable(keysList)
+	    .map(id -> String.valueOf(id))
+		    .map(systemId -> Pair.of(CachesManger.documentContextFromCache(systemId), systemId))
+		    .map(pair -> {
 
 			Object results = Try.of(() -> pair.getLeft().read(jsonPath)).getOrNull();
 			Optional<String> jsonPathResult = Optional.empty();
@@ -52,8 +54,7 @@ public class FilterVerticle extends AbstractVerticle {
 			return jsonPathResult;
 
 		    })
-		    .sequential()
-		   . filter(item -> item.isPresent())
+		    .filter(item -> item.isPresent())
 		    .reduce(result, new JsonArrayReducer()).subscribe(jsonArray -> {
 			message.reply(jsonArray);
 		    });

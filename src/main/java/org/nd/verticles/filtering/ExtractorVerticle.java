@@ -51,8 +51,10 @@ public class ExtractorVerticle extends AbstractVerticle {
 		JsonArray jsonsList = (JsonArray) container;
 		JsonArray result = new JsonArray();
 
-		Flowable.fromIterable(jsonsList).map(object -> ((JsonObject) object).getString("_systemId"))
-			.map(systemId -> Pair.of(CachesManger.flattenFromCache(systemId), systemId)).map(pair -> {
+		Flowable.fromIterable(jsonsList)
+		.map(object -> ((JsonObject) object).getString("_systemId"))
+			.map(systemId -> Pair.of(CachesManger.flattenFromCache(systemId), systemId))
+			.map(pair -> {
 
 			    String systemId = pair.getRight();
 			    Map<String, Object> flattenJson = pair.getLeft();
@@ -68,7 +70,9 @@ public class ExtractorVerticle extends AbstractVerticle {
 			    Optional<JsonObject> extractResult = Optional.of(new JsonObject(outputJson));
 			    return extractResult;
 
-			}).reduce(result, new JsonArrayReducer()).subscribe(jsonArray -> {
+			})
+			.reduce(result, new JsonArrayReducer())
+			.subscribe(jsonArray -> {
 			    message.reply(jsonArray);
 			});
 
