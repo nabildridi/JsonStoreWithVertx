@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import com.jayway.jsonpath.JsonPath;
 
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
+import io.vavr.control.Try;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonArray;
@@ -30,14 +32,13 @@ public class FilterVerticle extends AbstractVerticle {
 	    List<String> keysList = List.copyOf(filesMap.keySet());
 
 	    String JsonPathQuery = message.body();
-	    JsonPath jsonPath = JsonPath.compile(JsonPathQuery);
+	    JsonPath jsonPath = Try.of(() -> JsonPath.compile(JsonPathQuery)).getOrNull();
 	    JsonArray result = new JsonArray();
 
-	    Flowable.fromIterable(keysList).map(id -> String.valueOf(id))
+	    Flowable.fromIterable(keysList).parallel().runOn(Schedulers.io()).map(id -> String.valueOf(id))
 		    .map(systemId -> Pair.of(CachesManger.documentContextFromCache(systemId), systemId)).map(pair -> {
 
-		    Object results =null;
-			try { results = pair.getLeft().read(jsonPath); } catch (Exception e) {}
+			Object results = Try.of(() -> pair.getLeft().read(jsonPath)).getOrNull();
 			Optional<String> jsonPathResult = Optional.empty();
 			if (results != null) {
 			    if (results instanceof List) {
@@ -50,7 +51,10 @@ public class FilterVerticle extends AbstractVerticle {
 			}
 			return jsonPathResult;
 
-		    }).reduce(result, new JsonArrayReducer()).subscribe(jsonArray -> {
+		    })
+		    .sequential()
+		   . filter(item -> item.isPresent())
+		    .reduce(result, new JsonArrayReducer()).subscribe(jsonArray -> {
 			message.reply(jsonArray);
 		    });
 

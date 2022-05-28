@@ -10,9 +10,7 @@ public class JsonArrayReducer implements BiFunction<JsonArray, Optional<?>, Json
 
 	@Override
 	public @NonNull JsonArray apply(@NonNull JsonArray jsonArray, @NonNull Optional<?> value) throws Throwable {
-		if (!value.isEmpty())
-			jsonArray.add(value.get());
-		return jsonArray;
+		return jsonArray.add(value.get());
 	}
 
 }

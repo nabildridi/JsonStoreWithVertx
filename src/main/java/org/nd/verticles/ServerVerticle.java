@@ -5,8 +5,7 @@ import org.nd.routes.Routes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.lambdista.util.Try;
-
+import io.vavr.control.Try;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
@@ -69,7 +68,7 @@ public class ServerVerticle extends AbstractVerticle {
 
 		{
 
-			JsonObject query = Try.apply(() -> ctx.body().asJsonObject()).getOrElse(null);
+			JsonObject query =  Try.of(() -> ctx.body().asJsonObject()).getOrNull();
 
 			if (query != null) {
 
@@ -95,7 +94,7 @@ public class ServerVerticle extends AbstractVerticle {
 		// add or full update document
 		router.post("/").consumes("*/json").handler(ctx -> {
 
-			JsonObject json = Try.apply(() -> ctx.body().asJsonObject()).getOrElse(null);
+			JsonObject json =  Try.of(() -> ctx.body().asJsonObject()).getOrNull();
 
 			if (json != null) {
 
@@ -118,7 +117,7 @@ public class ServerVerticle extends AbstractVerticle {
 		// partial update
 		router.put("/").handler(ctx -> {
 
-			JsonObject partialJson = Try.apply(() -> ctx.body().asJsonObject()).getOrElse(null);
+			JsonObject partialJson =  Try.of(() -> ctx.body().asJsonObject()).getOrNull();
 
 			// if json is invalid --> exit
 			if (partialJson == null) {
@@ -149,7 +148,7 @@ public class ServerVerticle extends AbstractVerticle {
 			String[] pathFragments = path.substring(1).split("/");
 			String id = pathFragments[0];
 
-			JsonObject json = Try.apply(() -> ctx.body().asJsonObject()).getOrElse(null);
+			JsonObject json =  Try.of(() -> ctx.body().asJsonObject()).getOrNull();
 
 			// if json is invalid --> exit
 			if (json == null && id.isEmpty()) {
