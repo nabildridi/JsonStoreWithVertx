@@ -342,11 +342,11 @@ Test : 33000 documents fully cached, I7 processor with 16 gb of ram
 |Operation| Time |
 |--|--|
 | Pagination |  ~7 ms |
-| Pagination and sorting | ~60 ms |
-| Pagination and extracting  | ~9 ms |
-| Pagination, sorting and extracting  | ~65 ms |
-| Pagination and filtering  | ~40 ms |
-| Pagination, filtering, sorting and extracting | ~45 ms |
+| Pagination and sorting | ~45 ms |
+| Pagination and extracting  | ~7 ms |
+| Pagination, sorting and extracting  | ~40 ms |
+| Pagination and filtering  | ~50 ms |
+| Pagination, filtering, sorting and extracting | ~35 ms |
 
 
 
